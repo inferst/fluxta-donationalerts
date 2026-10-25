@@ -1,3 +1,4 @@
+import type { GoalUpdatedFields } from "donationalerts-protocol";
 import { z } from "zod";
 
 import { Numeric } from "./numeric";
@@ -5,15 +6,7 @@ import { Numeric } from "./numeric";
 export const GOAL_UPDATED = "goal-updated";
 
 /** Every Event Field the manifest declares for Goal Updated. */
-export type GoalUpdatedPayload = {
-  goalId: number;
-  title: string;
-  isActive: boolean;
-  currency: string;
-  startAmount: number;
-  raisedAmount: number;
-  goalAmount: number;
-};
+export type GoalUpdatedPayload = GoalUpdatedFields;
 
 /**
  * Only the fields DonationAlerts documents for a goal. `started_at` and
