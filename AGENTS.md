@@ -8,7 +8,7 @@ Fluxta DonationAlerts is a [Fluxta](https://fluxta.app) plugin that connects a s
 
 It is a pnpm workspace (turbo) of TypeScript packages. The Plugin API it builds against — `@fluxta/sdk` and the `fluxta` CLI from `@fluxta/cli` — is owned by Fluxta, not by this repo (see [Working against Fluxta](#working-against-fluxta)).
 
-**State of the repo**: Sign-in (#2) and Donation Received for live donations (#3). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
+**State of the repo**: Sign-in (#2), Donation Received for live donations (#3) and Goal Updated (#4). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
 
 ## Commands
 
@@ -77,12 +77,12 @@ donationalerts/   DonationAlerts plumbing
   loopback.ts       the redirect target on 127.0.0.1:29361, open only during a Sign-in
 realtime/         the Realtime Connection to DonationAlerts' Centrifugo
   client.ts         the narrow slice of centrifuge-js it uses, and the real client on Node's own WebSocket
-  connection.ts     follows the signed-in Account: socket token, private channel tokens, retries, state
+  connection.ts     follows the signed-in Account: socket token, private channel tokens, the donation and goal channels, retries, state
   retry.ts          the 1 s → 60 s backoff with jitter every retry shares
 events/           one file per manifest Event: its `type`, its payload type, a to…Payload mapping
 ```
 
-The Account's state travels `service.ts` (`onChange`) → `index.ts`, which points the Realtime Connection at the stored Account (`follow()`) and `publish()`es: the status to every open editor, the one External Connection to Fluxta. A publication on the donation channel travels `connection.ts` (`onDonation`) → `events/donation-received.ts` → `plugin.emitEvent`.
+The Account's state travels `service.ts` (`onChange`) → `index.ts`, which points the Realtime Connection at the stored Account (`follow()`) and `publish()`es: the status to every open editor, the one External Connection to Fluxta. A publication on the donation channel travels `connection.ts` (`onDonation`) → `events/donation-received.ts` → `plugin.emitEvent`; one on the goal channel, `onGoal` → `events/goal-updated.ts`. The connection's state follows the donation channel alone — a failing goal channel is retried and logged.
 
 ### Editor (`apps/editor`)
 
