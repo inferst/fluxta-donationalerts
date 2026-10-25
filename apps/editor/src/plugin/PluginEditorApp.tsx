@@ -1,10 +1,11 @@
 import { EditorPage, PluginEditorLayout } from "@fluxta/sdk/ui";
 
 import { AccountCard } from "./AccountCard";
+import { TestDonationCard } from "./TestDonationCard";
 import { usePluginStatus } from "./usePluginStatus";
 
 export function PluginEditorApp() {
-  const { status, sidecarSilent, send } = usePluginStatus();
+  const { status, sidecarSilent, testSent, send } = usePluginStatus();
 
   if (!status) {
     return (
@@ -33,6 +34,11 @@ export function PluginEditorApp() {
               send={send}
             />
           ),
+        },
+        {
+          id: "test-donation",
+          label: "Test donation",
+          content: <TestDonationCard testSent={testSent} send={send} />,
         },
       ]}
     />

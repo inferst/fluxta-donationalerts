@@ -1,4 +1,9 @@
-import { isEditorMessage, type PluginMessage } from "donationalerts-protocol";
+import {
+  isEditorMessage,
+  testDonationProblems,
+  type PluginMessage,
+  type TestDonationDraft,
+} from "donationalerts-protocol";
 
 import { AccountService } from "./account/service";
 import { AccountStore } from "./account/store";
@@ -10,6 +15,7 @@ import {
   toDonationReceived,
 } from "./events/donation-received";
 import { GOAL_UPDATED, toGoalUpdated } from "./events/goal-updated";
+import { toTestDonation } from "./events/test-donation";
 import { openInBrowser } from "./open-browser";
 import { plugin } from "./plugin";
 import { createCentrifugeClient } from "./realtime/client";
@@ -114,6 +120,21 @@ function publish(): void {
   );
 }
 
+/**
+ * Fires a Test Donation as Donation Received, signed in or not: nothing
+ * reaches DonationAlerts.
+ */
+function sendTestDonation(draft: TestDonationDraft): void {
+  if (Object.keys(testDonationProblems(draft)).length > 0) {
+    console.warn("A test donation the editor should have refused was ignored");
+    return;
+  }
+
+  console.log("Test donation sent");
+  plugin.emitEvent(DONATION_RECEIVED, toTestDonation(draft));
+  plugin.sendToEditor({ event: "test-donation-sent" } satisfies PluginMessage);
+}
+
 // Attached before connecting, so nothing sent while the editor was already
 // open is missed once the authenticated handshake completes.
 plugin.onReceiveFromEditor((message: unknown) => {
@@ -133,6 +154,9 @@ plugin.onReceiveFromEditor((message: unknown) => {
       return;
     case "sign-out":
       void account.signOut();
+      return;
+    case "send-test-donation":
+      sendTestDonation(message.donation);
       return;
   }
 });

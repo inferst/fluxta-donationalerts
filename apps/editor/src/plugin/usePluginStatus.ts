@@ -1,5 +1,5 @@
 import { usePluginEditor } from "@fluxta/sdk/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isPluginMessage,
   type EditorMessage,
@@ -13,15 +13,32 @@ import {
  */
 const SIDECAR_TIMEOUT_MS = 3000;
 
+/** How long "Sent" stays up after the sidecar confirms a Test Donation. */
+const TEST_SENT_MS = 3000;
+
 export function usePluginStatus() {
   const editor = usePluginEditor();
   const [status, setStatus] = useState<PluginStatus>();
   const [sidecarSilent, setSidecarSilent] = useState(false);
+  /** Whether the sidecar has just confirmed a Test Donation. */
+  const [testSent, setTestSent] = useState(false);
+  const testSentTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     const unsubscribe = editor.onReceiveFromPlugin((message: unknown) => {
-      if (isPluginMessage(message) && message.event === "status") {
+      if (!isPluginMessage(message)) {
+        return;
+      }
+
+      if (message.event === "status") {
         setStatus(message.status);
+      } else if (message.event === "test-donation-sent") {
+        setTestSent(true);
+        clearTimeout(testSentTimer.current);
+        testSentTimer.current = setTimeout(
+          () => setTestSent(false),
+          TEST_SENT_MS,
+        );
       }
     });
 
@@ -34,6 +51,7 @@ export function usePluginStatus() {
     return () => {
       unsubscribe();
       clearTimeout(timer);
+      clearTimeout(testSentTimer.current);
     };
   }, [editor]);
 
@@ -42,5 +60,5 @@ export function usePluginStatus() {
     [editor],
   );
 
-  return { status, sidecarSilent, send };
+  return { status, sidecarSilent, testSent, send };
 }

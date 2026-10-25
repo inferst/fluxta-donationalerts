@@ -8,7 +8,7 @@ Fluxta DonationAlerts is a [Fluxta](https://fluxta.app) plugin that connects a s
 
 It is a pnpm workspace (turbo) of TypeScript packages. The Plugin API it builds against — `@fluxta/sdk` and the `fluxta` CLI from `@fluxta/cli` — is owned by Fluxta, not by this repo (see [Working against Fluxta](#working-against-fluxta)).
 
-**State of the repo**: Sign-in (#2), Donation Received (#3) with Catch-up and once-per-publication delivery (#5), Goal Updated (#4), and Sign-in Expiry with Reauthorization Required (#6). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
+**State of the repo**: Sign-in (#2), Donation Received (#3) with Catch-up and once-per-publication delivery (#5), Goal Updated (#4), Sign-in Expiry with Reauthorization Required (#6), and Test Donations (#7). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
 
 ## Commands
 
@@ -58,7 +58,7 @@ Editor-only rebuilds restart nothing — reopen the editor in Fluxta to see them
 
 - `apps/plugin` (`donationalerts-plugin`) — the Plugin sidecar: the Node.js process Fluxta starts. tsdown bundles it into `dist/donationalerts/index.mjs` and copies `manifest.json` and `icons/` beside it.
 - `apps/editor` (`donationalerts-editor`) — the Plugin Editor (`plugin.html`, in Fluxta's settings), React + Vite + Tailwind, built into `dist/donationalerts/editor/`. The plugin has no Action Editors.
-- `packages/protocol` (`donationalerts-protocol`) — what the sidecar and the editor share: the editor ↔ sidecar messages and the state the Plugin Editor renders (`messages.ts`, each message an object with an `event` discriminant, checked with zod) the Account as the editor sees it (`account.ts`), and when to warn of a Sign-in Expiry (`expiry.ts`). Consumed as TypeScript source; it has no build.
+- `packages/protocol` (`donationalerts-protocol`) — what the sidecar and the editor share: the editor ↔ sidecar messages and the state the Plugin Editor renders (`messages.ts`, each message an object with an `event` discriminant, checked with zod) the Account as the editor sees it (`account.ts`), when to warn of a Sign-in Expiry (`expiry.ts`), and the Test Donation draft with the checks both sides run (`test-donation.ts`). Consumed as TypeScript source; it has no build.
 
 ### Plugin sidecar (`apps/plugin/src`)
 
@@ -81,14 +81,14 @@ realtime/         the Realtime Connection to DonationAlerts' Centrifugo
   retry.ts          the 1 s → 60 s backoff with jitter every retry shares
 donations/
   feed.ts           one Donation Received per publication: replays skipped, Repeats fired, Catch-up after a drop
-events/           one file per manifest Event: its `type`, its payload type, a to…Payload mapping
+events/           one file per manifest Event: its `type`, its payload type, a to…Payload mapping; test-donation.ts maps a Test Donation
 ```
 
 The Account's state travels `service.ts` (`onChange`) → `index.ts`, which points the Realtime Connection at the stored Account (`follow()`) and `publish()`es: the status to every open editor, the one External Connection to Fluxta. A publication on the donation channel travels `connection.ts` (`onDonation`, with its position) → `donations/feed.ts` → `events/donation-received.ts` → `plugin.emitEvent`, and every subscription of that channel (`onDonationsSubscribed`) lets the feed set its boundary or catch up; one on the goal channel, `onGoal` → `events/goal-updated.ts`. The connection's state follows the donation channel alone — a failing goal channel is retried and logged.
 
 ### Editor (`apps/editor`)
 
-- `src/plugin/` is the Plugin Editor: `AccountCard.tsx` renders the Account and its Realtime Connection and sends `sign-in`, `cancel-sign-in`, `sign-out`; `usePluginStatus.ts` holds the last status the sidecar sent.
+- `src/plugin/` is the Plugin Editor: `AccountCard.tsx` renders the Account and its Realtime Connection and sends `sign-in`, `cancel-sign-in`, `sign-out`; `TestDonationCard.tsx` sends `send-test-donation`; `usePluginStatus.ts` holds the last status the sidecar sent and whether a Test Donation was just confirmed.
 - Built from Fluxta's [UI Kit](https://fluxta.app/docs/plugins/reference/ui-kit) (`@fluxta/sdk/ui`).
 
 ## Key Conventions
