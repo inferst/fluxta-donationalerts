@@ -8,6 +8,7 @@ import {
   DONATION_RECEIVED,
   toDonationReceived,
 } from "./events/donation-received";
+import { GOAL_UPDATED, toGoalUpdated } from "./events/goal-updated";
 import { openInBrowser } from "./open-browser";
 import { plugin } from "./plugin";
 import { createCentrifugeClient } from "./realtime/client";
@@ -43,6 +44,17 @@ const realtime = new RealtimeConnection({
     // The id only: donor names and messages stay out of the log.
     console.log(`Donation ${payload.donationId} received`);
     plugin.emitEvent(DONATION_RECEIVED, payload);
+  },
+  onGoal: (data) => {
+    const payload = toGoalUpdated(data);
+
+    if (!payload) {
+      console.warn("A goal update the plugin could not read was skipped");
+      return;
+    }
+
+    console.log(`Goal ${payload.goalId} updated`);
+    plugin.emitEvent(GOAL_UPDATED, payload);
   },
   onChange: () => publish(),
 });
