@@ -26,6 +26,11 @@ export type RealtimeConnectionDeps = {
   onDonationsSubscribed(account: RealtimeAccount): void;
   /** A publication on the Account's goal channel, as Centrifugo sent it. */
   onGoal(data: unknown): void;
+  /**
+   * DonationAlerts refused the Account's token. The connection is already
+   * down and retries nothing; only a new Sign-in brings it back.
+   */
+  onUnauthorized(): void;
   /** Called whenever what `state()` returns may have changed. */
   onChange(): void;
 };
@@ -50,7 +55,8 @@ type RetryKey = "start" | "donations" | "goals";
  * tokens through `onPrivateSubscribe`); what it does not retry — fetching the
  * socket token, a refused subscription, a server that will not take the
  * client back — is retried here on the same curve. Only DonationAlerts
- * refusing the Account's token stops it.
+ * refusing the Account's token stops it, and the Account is then
+ * Reauthorization Required.
  *
  * The state follows the donation channel alone: Donations are what the
  * plugin is for, so a goal channel that fails to subscribe is retried and
@@ -202,9 +208,12 @@ export class RealtimeConnection {
 
   private fail(error: unknown, retry: () => void): void {
     if (error instanceof Unauthorized) {
-      // Waiting will not fix it: stop until the Account signs in again.
+      // Waiting will not fix it: stop until the Account signs in again. The
+      // Account remembers it is Reauthorization Required, so a restart does
+      // not try the token again either.
       this.teardown();
-      this.set({ status: "stopped", reason: error.message });
+      this.set(undefined);
+      this.deps.onUnauthorized();
       return;
     }
 

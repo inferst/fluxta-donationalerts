@@ -29,6 +29,13 @@ export type AccountServiceDeps = {
 
 type Outcome = SignInAnswer | { kind: "timeout" } | { kind: "cancelled" };
 
+/**
+ * The longest wait a timer can hold: Node fires a `setTimeout` beyond 2^31-1
+ * ms (about 24.8 days) almost at once, and a Sign-in Expiry is a year away.
+ * Longer waits are taken in steps of this.
+ */
+export const MAX_TIMER_MS = 2 ** 31 - 1;
+
 type SignIn = {
   authorizeUrl: string;
   end(outcome: Outcome): void;
@@ -38,13 +45,20 @@ type SignIn = {
  * The Account and its Sign-in.
  *
  * A Sign-in runs from the editor's press to the browser coming back, or to
- * its timeout or cancellation. Signing in while signed in replaces the
- * Account once the new Sign-in succeeds; until then the old one stays.
+ * its timeout or cancellation. Signing in while signed in, or while
+ * Reauthorization Required, replaces the Account once the new Sign-in
+ * succeeds; until then the old one stays.
+ *
+ * DonationAlerts gives no refresh token, so a token is good until its
+ * Sign-in Expiry. The service drops it then, on its own — after a restart or
+ * while running, without asking DonationAlerts — and when DonationAlerts
+ * refuses it earlier (`refused`).
  */
 export class AccountService {
   private signIn: SignIn | undefined;
   /** Why the last Sign-in failed, until the next one starts. */
   private problem: string | undefined;
+  private cancelExpiry: (() => void) | undefined;
 
   constructor(private readonly deps: AccountServiceDeps) {}
 
@@ -55,11 +69,21 @@ export class AccountService {
 
     const account = this.deps.store.get();
 
-    if (account) {
+    if (account?.accessToken !== undefined) {
       return {
         status: "signed-in",
         name: account.name,
         avatar: account.avatar,
+        expiresAt: account.expiresAt,
+      };
+    }
+
+    if (account) {
+      return {
+        status: "reauthorization-required",
+        name: account.name,
+        avatar: account.avatar,
+        reason: account.expiresAt <= this.deps.now() ? "expired" : "refused",
         expiresAt: account.expiresAt,
       };
     }
@@ -118,12 +142,57 @@ export class AccountService {
     this.deps.onChange();
   }
 
+  /**
+   * Holds the stored Account to its Sign-in Expiry: drops a token already
+   * past it, and waits for the expiry of one that is not. Called whenever
+   * the stored Account may have changed; safe to call again.
+   */
+  async reconcile(): Promise<void> {
+    this.cancelExpiry?.();
+    this.cancelExpiry = undefined;
+
+    const account = this.deps.store.get();
+
+    if (account?.accessToken === undefined) {
+      return;
+    }
+
+    const remaining = account.expiresAt - this.deps.now();
+
+    if (remaining <= 0) {
+      await this.deps.store.dropToken();
+      console.log("The DonationAlerts sign-in expired; sign in again");
+      this.deps.onChange();
+      return;
+    }
+
+    this.cancelExpiry = this.deps.schedule(
+      Math.min(remaining, MAX_TIMER_MS),
+      () => void this.reconcile(),
+    );
+  }
+
+  /** DonationAlerts refused the Account's token: it needs a new Sign-in. */
+  async refused(): Promise<void> {
+    if (this.deps.store.get()?.accessToken === undefined) {
+      return;
+    }
+
+    this.cancelExpiry?.();
+    this.cancelExpiry = undefined;
+    await this.deps.store.dropToken();
+    console.log("DonationAlerts no longer accepts the sign-in; sign in again");
+    this.deps.onChange();
+  }
+
   cancelSignIn(): void {
     this.signIn?.end({ kind: "cancelled" });
   }
 
   async signOut(): Promise<void> {
     this.cancelSignIn();
+    this.cancelExpiry?.();
+    this.cancelExpiry = undefined;
     this.problem = undefined;
     await this.deps.store.clear();
     console.log("Signed out of DonationAlerts");
@@ -145,6 +214,7 @@ export class AccountService {
             expiresAt: signedInAt + outcome.expiresIn * 1000,
           });
           console.log(`Signed in to DonationAlerts as user ${user.id}`);
+          await this.reconcile();
         } catch (error) {
           this.problem = `DonationAlerts did not return the account: ${describe(error)}`;
         }

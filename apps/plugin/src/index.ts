@@ -66,13 +66,21 @@ const realtime = new RealtimeConnection({
     console.log(`Goal ${payload.goalId} updated`);
     plugin.emitEvent(GOAL_UPDATED, payload);
   },
+  onUnauthorized: () => void account.refused(),
   onChange: () => publish(),
 });
 
-/** Keeps the Realtime Connection on the signed-in Account, or stops it. */
+/**
+ * Keeps the Realtime Connection on the signed-in Account, or stops it — also
+ * for an Account that is Reauthorization Required, which has no token.
+ */
 function follow(): void {
   const stored = store.get();
-  realtime.follow(stored && { id: stored.id, accessToken: stored.accessToken });
+  realtime.follow(
+    stored?.accessToken === undefined
+      ? undefined
+      : { id: stored.id, accessToken: stored.accessToken },
+  );
 }
 
 /**
@@ -135,8 +143,11 @@ await plugin.connect();
 // firing — which the SDK guarantees fires immediately with what is already
 // persisted — waits for it, and doubles as startup hydration. Later firings
 // echo the store's own writes, the only writer there is.
-await plugin.onPluginSettings<unknown>((settings) => {
+await plugin.onPluginSettings<unknown>(async (settings) => {
   store.hydrate(settings);
+  // Before anything tries the token: an Account whose Sign-in Expiry passed
+  // while Fluxta was closed is Reauthorization Required.
+  await account.reconcile();
   follow();
   publish();
 });

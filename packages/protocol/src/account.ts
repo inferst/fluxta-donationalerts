@@ -25,6 +25,18 @@ export const AccountStateSchema = z.discriminatedUnion("status", [
     /** Epoch milliseconds: the Account's Sign-in Expiry. */
     expiresAt: z.number(),
   }),
+  /**
+   * The Account needs a new Sign-in: its Sign-in Expiry has passed
+   * (`expired`), or DonationAlerts refused its token (`refused`). The
+   * identity stays so the editor can say whose account to sign in again.
+   */
+  z.object({
+    status: z.literal("reauthorization-required"),
+    name: z.string(),
+    avatar: z.string(),
+    reason: z.enum(["expired", "refused"]),
+    expiresAt: z.number(),
+  }),
 ]);
 
 export type AccountState = z.infer<typeof AccountStateSchema>;
