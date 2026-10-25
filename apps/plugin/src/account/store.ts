@@ -3,14 +3,16 @@ import { z } from "zod";
 /**
  * The Account as persisted — the only place its token is kept.
  *
- * The identity is kept beside the token so that a later Reauthorization
- * Required can still say whose Account it was.
+ * The identity outlives the token: when the token is dropped — its Sign-in
+ * Expiry passed, or DonationAlerts refused it — the Account stays, without
+ * one, so the editor can still say whose account to sign in again.
  */
 const StoredAccountSchema = z.object({
   id: z.number(),
   name: z.string(),
   avatar: z.string(),
-  accessToken: z.string(),
+  /** Absent once the Account is Reauthorization Required. */
+  accessToken: z.string().optional(),
   /** Epoch milliseconds: the Sign-in Expiry. */
   expiresAt: z.number(),
 });
@@ -73,6 +75,17 @@ export class AccountStore {
     this.account = account;
     this.settings = { ...this.settings, account };
     await this.writer.setPluginSettings(this.settings);
+  }
+
+  /** Forgets the token and keeps who it belonged to. */
+  async dropToken(): Promise<void> {
+    if (this.account?.accessToken === undefined) {
+      return;
+    }
+
+    const account = { ...this.account };
+    delete account.accessToken;
+    await this.save(account);
   }
 
   async clear(): Promise<void> {

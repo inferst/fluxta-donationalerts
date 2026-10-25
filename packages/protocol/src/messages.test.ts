@@ -29,6 +29,20 @@ describe("isPluginMessage", () => {
         avatar: "https://example.com/a.png",
         expiresAt: 1_800_000_000_000,
       },
+      {
+        status: "reauthorization-required",
+        name: "MikeRime",
+        avatar: "",
+        reason: "expired",
+        expiresAt: 1_800_000_000_000,
+      },
+      {
+        status: "reauthorization-required",
+        name: "MikeRime",
+        avatar: "",
+        reason: "refused",
+        expiresAt: 1_800_000_000_000,
+      },
     ]) {
       expect(isPluginMessage({ event: "status", status: { account } })).toBe(
         true,
@@ -47,10 +61,6 @@ describe("isPluginMessage", () => {
       { status: "connecting" },
       { status: "connected" },
       { status: "reconnecting", reason: "connection closed" },
-      {
-        status: "stopped",
-        reason: "DonationAlerts no longer accepts this sign-in",
-      },
     ]) {
       expect(
         isPluginMessage({ event: "status", status: { account, realtime } }),

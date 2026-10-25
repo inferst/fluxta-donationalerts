@@ -100,6 +100,7 @@ function setup() {
   const onDonation = vi.fn();
   const onGoal = vi.fn();
   const onDonationsSubscribed = vi.fn();
+  const onUnauthorized = vi.fn();
   const connection = new RealtimeConnection({
     api,
     createClient: (authorize) => {
@@ -112,6 +113,7 @@ function setup() {
     onDonation,
     onGoal,
     onDonationsSubscribed,
+    onUnauthorized,
     onChange: () => {},
   });
   return {
@@ -122,6 +124,7 @@ function setup() {
     onDonation,
     onGoal,
     onDonationsSubscribed,
+    onUnauthorized,
   };
 }
 
@@ -333,28 +336,26 @@ describe("RealtimeConnection", () => {
     expect(timers.pending[0]?.ms).toBe(2_000);
   });
 
-  it("stops for good when DonationAlerts refuses the token", async () => {
-    const { connection, clients, timers, api } = setup();
+  it("stops for good and says so when DonationAlerts refuses the token", async () => {
+    const { connection, clients, timers, api, onUnauthorized } = setup();
     api.getUser.mockRejectedValueOnce(new Unauthorized());
     connection.follow(ACCOUNT);
     await settle();
 
-    expect(connection.state()).toEqual({
-      status: "stopped",
-      reason: "DonationAlerts no longer accepts this sign-in",
-    });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(connection.state()).toBeUndefined();
     expect(timers.pending).toHaveLength(0);
     expect(clients).toHaveLength(0);
 
     // The same Account again is not a reason to retry; a new token is.
     connection.follow(ACCOUNT);
-    expect(connection.state()).toMatchObject({ status: "stopped" });
+    expect(connection.state()).toBeUndefined();
     connection.follow({ ...ACCOUNT, accessToken: "new-token" });
     expect(connection.state()).toEqual({ status: "connecting" });
   });
 
   it("stops when a channel token is refused for the token", async () => {
-    const { connection, clients, api } = setup();
+    const { connection, clients, api, onUnauthorized } = setup();
     api.subscribeChannels.mockRejectedValueOnce(new Unauthorized());
     connection.follow(ACCOUNT);
     await settle();
@@ -363,7 +364,8 @@ describe("RealtimeConnection", () => {
     await settle();
 
     expect(clients[0]!.disconnected).toBe(true);
-    expect(connection.state()).toMatchObject({ status: "stopped" });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(connection.state()).toBeUndefined();
   });
 
   it("disconnects on sign out and ignores the old client afterwards", async () => {

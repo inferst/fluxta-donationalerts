@@ -5,11 +5,16 @@ import {
   StatusBadge,
   type StatusTone,
 } from "@fluxta/sdk/ui";
-import type {
-  AccountState,
-  EditorMessage,
-  RealtimeState,
+import {
+  daysUntilExpiry,
+  type AccountState,
+  type EditorMessage,
+  type RealtimeState,
 } from "donationalerts-protocol";
+
+import { useNow } from "./useNow";
+
+const HOUR_MS = 60 * 60 * 1000;
 
 type Props = {
   account: AccountState;
@@ -30,6 +35,8 @@ export function AccountCard({ account, realtime, send }: Props) {
 }
 
 function AccountRow({ account, realtime, send }: Props) {
+  const now = useNow(HOUR_MS);
+
   switch (account.status) {
     case "signed-out":
       return (
@@ -86,21 +93,75 @@ function AccountRow({ account, realtime, send }: Props) {
         />
       );
 
-    case "signed-in":
+    case "signed-in": {
+      const daysLeft = daysUntilExpiry(account.expiresAt, now);
+
       return (
         <ListRow
           leading={<Avatar src={account.avatar} />}
           title={account.name}
           description={`Signed in until ${formatDate(account.expiresAt)}`}
           badges={<RealtimeBadge realtime={realtime} />}
-          detail={<RealtimeDetail realtime={realtime} />}
+          detail={
+            <>
+              {daysLeft === undefined ? null : (
+                <p role="alert" className="text-destructive text-xs/relaxed">
+                  The sign-in expires in {daysLeft}{" "}
+                  {daysLeft === 1 ? "day" : "days"}. DonationAlerts gives no way
+                  to extend it — sign in again to keep receiving donations.
+                </p>
+              )}
+              <RealtimeDetail realtime={realtime} />
+            </>
+          }
           actions={
-            <Button
-              variant="outline"
-              onClick={() => send({ event: "sign-out" })}
-            >
-              Sign out
-            </Button>
+            <>
+              {daysLeft === undefined ? null : (
+                <Button onClick={() => send({ event: "sign-in" })}>
+                  Sign in again
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => send({ event: "sign-out" })}
+              >
+                Sign out
+              </Button>
+            </>
+          }
+        />
+      );
+    }
+
+    case "reauthorization-required":
+      return (
+        <ListRow
+          leading={<Avatar src={account.avatar} />}
+          title={account.name}
+          description={
+            account.reason === "expired"
+              ? `The sign-in expired on ${formatDate(account.expiresAt)}.`
+              : "DonationAlerts no longer accepts this sign-in — access may have been revoked in its settings."
+          }
+          badges={<StatusBadge tone="idle">Signed out</StatusBadge>}
+          detail={
+            <p className="text-muted-foreground text-xs/relaxed">
+              No donations or goal updates reach Fluxta until you sign in again
+              as {account.name}.
+            </p>
+          }
+          actions={
+            <>
+              <Button onClick={() => send({ event: "sign-in" })}>
+                Sign in again
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => send({ event: "sign-out" })}
+              >
+                Forget
+              </Button>
+            </>
           }
         />
       );
@@ -111,14 +172,12 @@ const TONE: Record<RealtimeState["status"], StatusTone> = {
   connecting: "pending",
   connected: "ok",
   reconnecting: "pending",
-  stopped: "error",
 };
 
 const LABEL: Record<RealtimeState["status"], string> = {
   connecting: "Connecting",
   connected: "Connected",
   reconnecting: "Reconnecting",
-  stopped: "Stopped",
 };
 
 function RealtimeBadge({ realtime }: { realtime?: RealtimeState }) {
@@ -140,12 +199,6 @@ function RealtimeDetail({ realtime }: { realtime?: RealtimeState }) {
         <p className="text-muted-foreground text-xs/relaxed">
           Lost DonationAlerts ({realtime.reason}). Trying again on its own —
           nothing to do.
-        </p>
-      );
-    case "stopped":
-      return (
-        <p role="alert" className="text-destructive text-xs/relaxed">
-          {realtime.reason}. Sign out and sign in again.
         </p>
       );
     default:

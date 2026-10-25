@@ -8,7 +8,7 @@ Fluxta DonationAlerts is a [Fluxta](https://fluxta.app) plugin that connects a s
 
 It is a pnpm workspace (turbo) of TypeScript packages. The Plugin API it builds against — `@fluxta/sdk` and the `fluxta` CLI from `@fluxta/cli` — is owned by Fluxta, not by this repo (see [Working against Fluxta](#working-against-fluxta)).
 
-**State of the repo**: Sign-in (#2), Donation Received (#3) with Catch-up and once-per-publication delivery (#5), and Goal Updated (#4). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
+**State of the repo**: Sign-in (#2), Donation Received (#3) with Catch-up and once-per-publication delivery (#5), Goal Updated (#4), and Sign-in Expiry with Reauthorization Required (#6). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
 
 ## Commands
 
@@ -58,7 +58,7 @@ Editor-only rebuilds restart nothing — reopen the editor in Fluxta to see them
 
 - `apps/plugin` (`donationalerts-plugin`) — the Plugin sidecar: the Node.js process Fluxta starts. tsdown bundles it into `dist/donationalerts/index.mjs` and copies `manifest.json` and `icons/` beside it.
 - `apps/editor` (`donationalerts-editor`) — the Plugin Editor (`plugin.html`, in Fluxta's settings), React + Vite + Tailwind, built into `dist/donationalerts/editor/`. The plugin has no Action Editors.
-- `packages/protocol` (`donationalerts-protocol`) — what the sidecar and the editor share: the editor ↔ sidecar messages and the state the Plugin Editor renders (`messages.ts`, each message an object with an `event` discriminant, checked with zod) and the Account as the editor sees it (`account.ts`). Consumed as TypeScript source; it has no build.
+- `packages/protocol` (`donationalerts-protocol`) — what the sidecar and the editor share: the editor ↔ sidecar messages and the state the Plugin Editor renders (`messages.ts`, each message an object with an `event` discriminant, checked with zod) the Account as the editor sees it (`account.ts`), and when to warn of a Sign-in Expiry (`expiry.ts`). Consumed as TypeScript source; it has no build.
 
 ### Plugin sidecar (`apps/plugin/src`)
 
@@ -69,7 +69,7 @@ schedule.ts       the timer the services take, so tests can drive time by hand
 open-browser.ts   opens the consent screen from the sidecar — editor iframes are sandboxed
 account/
   store.ts          the persisted Account — the only writer of Plugin Settings, the only holder of the token
-  service.ts        Sign-in (loopback, timeout, cancel), Sign out, and the AccountState the editor renders
+  service.ts        Sign-in (loopback, timeout, cancel), Sign out, Sign-in Expiry (a timer in steps under 2^31 ms) and Reauthorization Required, and the AccountState the editor renders
 donationalerts/   DonationAlerts plumbing
   config.ts         the public client id, the loopback redirect, every scope with the feature it serves
   api.ts            the only code that calls fetch: `/user/oauth`, `/centrifuge/subscribe`; a 401 is `Unauthorized`

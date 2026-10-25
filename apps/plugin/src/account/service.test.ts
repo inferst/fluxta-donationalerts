@@ -10,7 +10,7 @@ import {
   type Loopback,
   type SignInAnswer,
 } from "../donationalerts/loopback";
-import { AccountService } from "./service";
+import { AccountService, MAX_TIMER_MS } from "./service";
 import { AccountStore } from "./store";
 
 const USER: DonationAlertsUser = {
@@ -239,5 +239,151 @@ describe("AccountService", () => {
 
     expect(store.get()).toBeUndefined();
     expect(service.state()).toEqual({ status: "signed-out" });
+  });
+});
+
+/** A clock that moves only when the test says so, and runs what falls due. */
+function virtualClock(start: number) {
+  const pending: { at: number; ms: number; run: () => void }[] = [];
+  const clock = {
+    now: start,
+    pending,
+    schedule(ms: number, run: () => void) {
+      const timer = { at: clock.now + ms, ms, run };
+      pending.push(timer);
+      return () => {
+        const index = pending.indexOf(timer);
+        if (index !== -1) pending.splice(index, 1);
+      };
+    },
+    async advance(ms: number) {
+      clock.now += ms;
+      for (const timer of pending.filter((t) => t.at <= clock.now)) {
+        pending.splice(pending.indexOf(timer), 1);
+        timer.run();
+      }
+      await settle();
+    },
+  };
+  return clock;
+}
+
+function expirySetup(expiresAt: number) {
+  const clock = virtualClock(NOW);
+  const store = new AccountStore({ setPluginSettings: async () => {} });
+  const api: DonationAlertsApi = {
+    getUser: vi.fn(async () => USER),
+    subscribeChannels: vi.fn(async () => []),
+    listDonations: vi.fn(async () => []),
+  };
+  const onChange = vi.fn();
+  const fake = fakeLoopback();
+  const service = new AccountService({
+    store,
+    api,
+    openLoopback: async () => fake.loopback,
+    openBrowser: () => {},
+    now: () => clock.now,
+    schedule: clock.schedule,
+    onChange,
+  });
+  store.hydrate({
+    account: { ...IDENTITY, accessToken: "tok", expiresAt },
+  });
+  return { service, store, api, clock, onChange, fake };
+}
+
+const HOUR = 60 * 60 * 1000;
+
+describe("Sign-in Expiry and Reauthorization Required", () => {
+  it("drops a token whose expiry passed while Fluxta was closed, asking nobody", async () => {
+    const { service, store, api, onChange } = expirySetup(NOW - 1);
+
+    await service.reconcile();
+
+    expect(store.get()?.accessToken).toBeUndefined();
+    expect(service.state()).toEqual({
+      status: "reauthorization-required",
+      name: USER.name,
+      avatar: USER.avatar,
+      reason: "expired",
+      expiresAt: NOW - 1,
+    });
+    expect(api.getUser).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it("drops the token when the expiry passes while running", async () => {
+    const { service, store, clock } = expirySetup(NOW + HOUR);
+    await service.reconcile();
+
+    await clock.advance(HOUR - 1);
+    expect(service.state().status).toBe("signed-in");
+
+    await clock.advance(1);
+    expect(store.get()?.accessToken).toBeUndefined();
+    expect(service.state()).toMatchObject({
+      status: "reauthorization-required",
+      reason: "expired",
+    });
+  });
+
+  it("waits a year in steps a timer can hold", async () => {
+    const YEAR = 31_536_000_000;
+    const { service, clock } = expirySetup(NOW + YEAR);
+    await service.reconcile();
+
+    expect(clock.pending.map((timer) => timer.ms)).toEqual([MAX_TIMER_MS]);
+    await clock.advance(MAX_TIMER_MS);
+    expect(service.state().status).toBe("signed-in");
+    expect(clock.pending).toHaveLength(1);
+
+    await clock.advance(YEAR - MAX_TIMER_MS);
+    expect(service.state()).toMatchObject({ reason: "expired" });
+  });
+
+  it("keeps a single expiry wait however often it reconciles", async () => {
+    const { service, clock } = expirySetup(NOW + HOUR);
+
+    await service.reconcile();
+    await service.reconcile();
+
+    expect(clock.pending).toHaveLength(1);
+  });
+
+  it("is Reauthorization Required, refused, when DonationAlerts refuses the token", async () => {
+    const { service, store, clock } = expirySetup(NOW + HOUR);
+    await service.reconcile();
+
+    await service.refused();
+
+    expect(store.get()).toEqual({ ...IDENTITY, expiresAt: NOW + HOUR });
+    expect(service.state()).toMatchObject({
+      status: "reauthorization-required",
+      reason: "refused",
+    });
+    expect(clock.pending).toHaveLength(0);
+  });
+
+  it("comes back with a new Sign-in", async () => {
+    const { service, store, fake } = expirySetup(NOW + HOUR);
+    await service.refused();
+
+    const done = service.startSignIn();
+    await settle();
+    fake.answer({ kind: "token", accessToken: "new", expiresIn: 60 });
+    await done;
+
+    expect(store.get()?.accessToken).toBe("new");
+    expect(service.state().status).toBe("signed-in");
+  });
+
+  it("stops waiting for the expiry on Sign out", async () => {
+    const { service, clock } = expirySetup(NOW + HOUR);
+    await service.reconcile();
+
+    await service.signOut();
+
+    expect(clock.pending).toHaveLength(0);
   });
 });

@@ -40,6 +40,26 @@ describe("AccountStore", () => {
     expect(store.hydrate({ account: { id: "x" } })).toBeUndefined();
   });
 
+  it("drops the token and keeps whose it was", async () => {
+    const settings = writer();
+    const store = new AccountStore(settings);
+    await store.save(ACCOUNT);
+
+    await store.dropToken();
+
+    const identity = {
+      id: ACCOUNT.id,
+      name: ACCOUNT.name,
+      avatar: ACCOUNT.avatar,
+      expiresAt: ACCOUNT.expiresAt,
+    };
+    expect(store.get()).toEqual(identity);
+    const reloaded = new AccountStore(writer());
+    expect(
+      reloaded.hydrate(settings.setPluginSettings.mock.lastCall?.at(0)),
+    ).toEqual(identity);
+  });
+
   it("keeps sections it does not know when it writes", async () => {
     const settings = writer();
     const store = new AccountStore(settings);
