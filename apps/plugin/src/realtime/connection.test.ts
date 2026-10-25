@@ -6,10 +6,11 @@ import type {
   RealtimeClient,
   SubscriptionHandlers,
 } from "./client";
-import { donationChannel, RealtimeConnection } from "./connection";
+import { donationChannel, goalChannel, RealtimeConnection } from "./connection";
 
 const ACCOUNT = { id: 10111687, accessToken: "access-token" };
 const CHANNEL = donationChannel(ACCOUNT.id);
+const GOALS = goalChannel(ACCOUNT.id);
 
 /** A centrifuge-js client that does only what the test makes it do. */
 class FakeClient implements RealtimeClient {
@@ -17,7 +18,7 @@ class FakeClient implements RealtimeClient {
   connected = false;
   disconnected = false;
   handlers = new Map<string, SubscriptionHandlers>();
-  resubscribes = 0;
+  resubscribes = new Map<string, number>();
   private onDisconnect: (ctx: { reason: string; reconnect: boolean }) => void =
     () => {};
 
@@ -40,20 +41,26 @@ class FakeClient implements RealtimeClient {
   }
   subscribe(channel: string, handlers: SubscriptionHandlers) {
     this.handlers.set(channel, handlers);
-    return { subscribe: () => void this.resubscribes++ };
+    return {
+      subscribe: () =>
+        void this.resubscribes.set(
+          channel,
+          (this.resubscribes.get(channel) ?? 0) + 1,
+        ),
+    };
   }
 
   /** What centrifuge-js does on connecting: ask for the channel tokens. */
   askForTokens(client: string) {
     return new Promise<{ status: number; data: unknown }>((resolve) =>
-      this.authorize({ data: { client, channels: [CHANNEL] } }, resolve),
+      this.authorize({ data: { client, channels: [CHANNEL, GOALS] } }, resolve),
     );
   }
   drop(reason: string, reconnect: boolean) {
     this.onDisconnect({ reason, reconnect });
   }
-  channel() {
-    return this.handlers.get(CHANNEL)!;
+  channel(name = CHANNEL) {
+    return this.handlers.get(name)!;
   }
 }
 
@@ -91,6 +98,7 @@ function setup() {
     ),
   };
   const onDonation = vi.fn();
+  const onGoal = vi.fn();
   const connection = new RealtimeConnection({
     api,
     createClient: (authorize) => {
@@ -101,9 +109,10 @@ function setup() {
     schedule: timers.schedule,
     random: () => 0,
     onDonation,
+    onGoal,
     onChange: () => {},
   });
-  return { connection, clients, timers, api, onDonation };
+  return { connection, clients, timers, api, onDonation, onGoal };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -119,7 +128,10 @@ describe("RealtimeConnection", () => {
     const [client] = clients;
     expect(client?.token).toBe("socket-token");
     expect(client?.connected).toBe(true);
-    expect([...client!.handlers.keys()]).toEqual(["$alerts:donation_10111687"]);
+    expect([...client!.handlers.keys()]).toEqual([
+      "$alerts:donation_10111687",
+      "$goals:goal_10111687",
+    ]);
   });
 
   it("answers the private subscribe with this client's channel tokens", async () => {
@@ -131,12 +143,15 @@ describe("RealtimeConnection", () => {
 
     expect(api.subscribeChannels).toHaveBeenCalledWith("access-token", {
       client: "client-1",
-      channels: [CHANNEL],
+      channels: [CHANNEL, GOALS],
     });
     expect(response).toEqual({
       status: 200,
       data: {
-        channels: [{ channel: CHANNEL, token: `token-for-${CHANNEL}` }],
+        channels: [
+          { channel: CHANNEL, token: `token-for-${CHANNEL}` },
+          { channel: GOALS, token: `token-for-${GOALS}` },
+        ],
       },
     });
   });
@@ -171,7 +186,7 @@ describe("RealtimeConnection", () => {
     await client.askForTokens("client-2");
     expect(api.subscribeChannels).toHaveBeenLastCalledWith("access-token", {
       client: "client-2",
-      channels: [CHANNEL],
+      channels: [CHANNEL, GOALS],
     });
     client.channel().subscribe({ isResubscribe: true, recovered: true });
     expect(connection.state()).toEqual({ status: "connected" });
@@ -227,7 +242,67 @@ describe("RealtimeConnection", () => {
     });
 
     timers.runNext();
-    expect(client.resubscribes).toBe(1);
+    expect(client.resubscribes.get(CHANNEL)).toBe(1);
+  });
+
+  it("hands on goal publications", async () => {
+    const { connection, clients, onDonation, onGoal } = setup();
+    connection.follow(ACCOUNT);
+    await settle();
+
+    clients[0]!.channel(GOALS).publish({ data: { id: 7 } });
+
+    expect(onGoal).toHaveBeenCalledWith({ id: 7 });
+    expect(onDonation).not.toHaveBeenCalled();
+  });
+
+  it("retries a goal channel without calling the connection down", async () => {
+    const { connection, clients, timers } = setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    connection.follow(ACCOUNT);
+    await settle();
+    const client = clients[0]!;
+    client.channel().subscribe({ isResubscribe: false, recovered: false });
+
+    client.channel(GOALS).error({ message: "permission denied" });
+
+    expect(connection.state()).toEqual({ status: "connected" });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("permission denied"),
+    );
+    timers.runNext();
+    expect(client.resubscribes.get(GOALS)).toBe(1);
+  });
+
+  it("keeps a donation retry and a goal retry apart", async () => {
+    const { connection, clients, timers } = setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    connection.follow(ACCOUNT);
+    await settle();
+    const client = clients[0]!;
+
+    client.channel().error({ message: "authorization request failed" });
+    client.channel(GOALS).error({ message: "authorization request failed" });
+    expect(timers.pending).toHaveLength(2);
+
+    timers.runNext();
+    timers.runNext();
+    expect(client.resubscribes.get(CHANNEL)).toBe(1);
+    expect(client.resubscribes.get(GOALS)).toBe(1);
+  });
+
+  it("does not reset its waits until the donation channel works", async () => {
+    const { connection, clients, timers } = setup();
+    connection.follow(ACCOUNT);
+    await settle();
+
+    clients[0]!.drop("invalid token", false);
+    expect(timers.pending[0]?.ms).toBe(1_000);
+    timers.runNext();
+    await settle();
+
+    clients[1]!.drop("invalid token", false);
+    expect(timers.pending[0]?.ms).toBe(2_000);
   });
 
   it("stops for good when DonationAlerts refuses the token", async () => {

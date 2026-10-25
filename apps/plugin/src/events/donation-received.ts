@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { Numeric } from "./numeric";
+
 export const DONATION_RECEIVED = "donation-received";
 
 /** Every Event Field the manifest declares for Donation Received. */
@@ -12,15 +14,6 @@ export type DonationReceivedPayload = {
   currency: string;
   isTest: boolean;
 };
-
-/** A number DonationAlerts may also send as a numeric string. */
-const Numeric = z.union([
-  z.number(),
-  z
-    .string()
-    .regex(/^-?\d+(\.\d+)?$/)
-    .transform(Number),
-]);
 
 /**
  * Only the fields DonationAlerts documents. Its publications carry more —

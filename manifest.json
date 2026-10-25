@@ -58,6 +58,47 @@
           "type": "boolean"
         }
       ]
+    },
+    {
+      "type": "goal-updated",
+      "name": "Goal Updated",
+      "fields": [
+        {
+          "key": "goalId",
+          "name": "Goal ID",
+          "type": "number"
+        },
+        {
+          "key": "title",
+          "name": "Title",
+          "type": "string"
+        },
+        {
+          "key": "isActive",
+          "name": "Is Active",
+          "type": "boolean"
+        },
+        {
+          "key": "currency",
+          "name": "Currency",
+          "type": "string"
+        },
+        {
+          "key": "startAmount",
+          "name": "Start Amount",
+          "type": "number"
+        },
+        {
+          "key": "raisedAmount",
+          "name": "Raised Amount",
+          "type": "number"
+        },
+        {
+          "key": "goalAmount",
+          "name": "Goal Amount",
+          "type": "number"
+        }
+      ]
     }
   ]
 }
