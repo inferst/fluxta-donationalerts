@@ -4,6 +4,7 @@ import { AccountService } from "./account/service";
 import { AccountStore } from "./account/store";
 import { createApi } from "./donationalerts/api";
 import { openLoopback } from "./donationalerts/loopback";
+import { DonationFeed } from "./donations/feed";
 import {
   DONATION_RECEIVED,
   toDonationReceived,
@@ -29,11 +30,9 @@ const account = new AccountService({
     publish();
   },
 });
-const realtime = new RealtimeConnection({
+const donations = new DonationFeed({
   api,
-  createClient: createCentrifugeClient,
-  schedule,
-  onDonation: (data) => {
+  fire: (data, delivery) => {
     const payload = toDonationReceived(data);
 
     if (!payload) {
@@ -42,9 +41,20 @@ const realtime = new RealtimeConnection({
     }
 
     // The id only: donor names and messages stay out of the log.
-    console.log(`Donation ${payload.donationId} received`);
+    console.log(
+      delivery === "catch-up"
+        ? `Donation ${payload.donationId} caught up`
+        : `Donation ${payload.donationId} received`,
+    );
     plugin.emitEvent(DONATION_RECEIVED, payload);
   },
+});
+const realtime = new RealtimeConnection({
+  api,
+  createClient: createCentrifugeClient,
+  schedule,
+  onDonation: (data, position) => donations.publication(data, position),
+  onDonationsSubscribed: (subscribed) => void donations.subscribed(subscribed),
   onGoal: (data) => {
     const payload = toGoalUpdated(data);
 

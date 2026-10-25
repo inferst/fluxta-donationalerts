@@ -67,6 +67,39 @@ describe("subscribeChannels", () => {
   });
 });
 
+describe("listDonations", () => {
+  it("reads the first page with each entry's id", async () => {
+    const entry = { id: 193057136, username: "Mike", amount: 100 };
+    const fetch = fakeFetch(() =>
+      Response.json({
+        data: [entry, { id: 191876672 }],
+        meta: { per_page: 30 },
+      }),
+    );
+
+    const listed = await createApi(fetch).listDonations("secret-token");
+
+    expect(listed).toEqual([
+      { id: 193057136, data: entry },
+      { id: 191876672, data: { id: 191876672 } },
+    ]);
+    expect(fetch.calls[0]?.url).toBe(
+      "https://www.donationalerts.com/api/v1/alerts/donations",
+    );
+    expect(fetch.calls[0]?.init?.headers).toEqual({
+      authorization: "Bearer secret-token",
+    });
+  });
+
+  it("refuses a list it cannot read", async () => {
+    const fetch = fakeFetch(() => Response.json({ data: [{ id: "x" }] }));
+
+    await expect(createApi(fetch).listDonations("t")).rejects.toThrow(
+      "donation list",
+    );
+  });
+});
+
 describe("getUser", () => {
   it("reads the Account's identity with the token in the header", async () => {
     const fetch = fakeFetch(() => Response.json(USER));

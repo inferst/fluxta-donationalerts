@@ -8,7 +8,7 @@ Fluxta DonationAlerts is a [Fluxta](https://fluxta.app) plugin that connects a s
 
 It is a pnpm workspace (turbo) of TypeScript packages. The Plugin API it builds against — `@fluxta/sdk` and the `fluxta` CLI from `@fluxta/cli` — is owned by Fluxta, not by this repo (see [Working against Fluxta](#working-against-fluxta)).
 
-**State of the repo**: Sign-in (#2), Donation Received for live donations (#3) and Goal Updated (#4). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
+**State of the repo**: Sign-in (#2), Donation Received (#3) with Catch-up and once-per-publication delivery (#5), and Goal Updated (#4). The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
 
 ## Commands
 
@@ -79,10 +79,12 @@ realtime/         the Realtime Connection to DonationAlerts' Centrifugo
   client.ts         the narrow slice of centrifuge-js it uses, and the real client on Node's own WebSocket
   connection.ts     follows the signed-in Account: socket token, private channel tokens, the donation and goal channels, retries, state
   retry.ts          the 1 s → 60 s backoff with jitter every retry shares
+donations/
+  feed.ts           one Donation Received per publication: replays skipped, Repeats fired, Catch-up after a drop
 events/           one file per manifest Event: its `type`, its payload type, a to…Payload mapping
 ```
 
-The Account's state travels `service.ts` (`onChange`) → `index.ts`, which points the Realtime Connection at the stored Account (`follow()`) and `publish()`es: the status to every open editor, the one External Connection to Fluxta. A publication on the donation channel travels `connection.ts` (`onDonation`) → `events/donation-received.ts` → `plugin.emitEvent`; one on the goal channel, `onGoal` → `events/goal-updated.ts`. The connection's state follows the donation channel alone — a failing goal channel is retried and logged.
+The Account's state travels `service.ts` (`onChange`) → `index.ts`, which points the Realtime Connection at the stored Account (`follow()`) and `publish()`es: the status to every open editor, the one External Connection to Fluxta. A publication on the donation channel travels `connection.ts` (`onDonation`, with its position) → `donations/feed.ts` → `events/donation-received.ts` → `plugin.emitEvent`, and every subscription of that channel (`onDonationsSubscribed`) lets the feed set its boundary or catch up; one on the goal channel, `onGoal` → `events/goal-updated.ts`. The connection's state follows the donation channel alone — a failing goal channel is retried and logged.
 
 ### Editor (`apps/editor`)
 
@@ -97,11 +99,11 @@ The Account's state travels `service.ts` (`onChange`) → `index.ts`, which poin
 - **Scopes are requested up front.** Sign-in asks for every scope the plugin uses or is expected to use, each commented with its feature: DonationAlerts gives no refresh token, so a new scope means every streamer signs in again.
 - **No secret, no server.** Sign-in is OAuth's implicit grant through a loopback redirect, and the plugin ships only the public client id. Never add a client secret.
 - **Tokens never leave the sidecar.** The access token and the `socket_connection_token` live only in Plugin settings and in memory; an editor sees whether an Account exists, never a token. No log line or error message may contain one. Donor names and messages are not written to the log either — log Donation ids.
-- **A dropped Realtime Connection is normal.** Reconnect without end with backoff and jitter; a 401 is the only thing that stops it (Reauthorization Required). Every Donation fires once per id, whether it arrives live, from Centrifugo's history on resubscribe, or by Catch-up.
+- **A dropped Realtime Connection is normal.** Reconnect without end with backoff and jitter; a 401 is the only thing that stops it (Reauthorization Required). Every publication fires once, whether it arrives live, from Centrifugo's history on resubscribe, or by Catch-up — and a Repeat, a new publication of the same Donation, fires again (`donations/feed.ts`).
 - **The plugin keeps no DonationAlerts state** beyond the Account and, in memory, what Catch-up and Recent Events need. Progress or flags a scenario wants to keep are the scenario's, in a Global Variable.
 - **The sidecar bundle is self-contained.** Fluxta runs it with a bundled Node and no `node_modules`, so tsdown inlines every non-builtin dependency (`noExternal`). Do not externalize one. `centrifuge` stays pinned to `2.8.5`: DonationAlerts runs Centrifugo v2. Its transport is Node's own `WebSocket` (Fluxta bundles Node 22.17), so there is no `ws`; `protobufjs`, which centrifuge 2.x pulls in for a build the plugin does not use, is denied its install script in `pnpm-workspace.yaml`.
 - **File naming**: the sidecar and the protocol package use kebab-case (`donation-received.ts`). In the editor, React components are PascalCase (`AccountCard.tsx`), hooks are `useThing.ts`.
-- **Tests**: vitest, colocated `*.test.ts`. No test reaches DonationAlerts: fake `fetch` (`api.test.ts`), a fake loopback and a manual clock for the Sign-in (`service.test.ts`), the real loopback server on a port the OS picks (`loopback.test.ts`), a fake centrifuge-js client behind `RealtimeClient` (`connection.test.ts`), payloads as DonationAlerts sent them (`donation-received.test.ts`).
+- **Tests**: vitest, colocated `*.test.ts`. No test reaches DonationAlerts: fake `fetch` (`api.test.ts`), a fake loopback and a manual clock for the Sign-in (`service.test.ts`), the real loopback server on a port the OS picks (`loopback.test.ts`), a fake centrifuge-js client behind `RealtimeClient` (`connection.test.ts`), a fake donation list and a manual clock for Catch-up (`feed.test.ts`), payloads as DonationAlerts sent them (`donation-received.test.ts`).
 - **The manifest declares `actions: []`.** The plugin has no Actions, but `fluxta validate` requires the field.
 - **Comments say why** — the DonationAlerts or Fluxta behaviour that forces the code — and use the capitalized terms of `CONTEXT.md` and Fluxta's [Terminology](https://fluxta.app/docs/plugins/getting-started/terminology).
 

@@ -41,7 +41,7 @@ Single-context repo:
 
 When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`, or as Fluxta's docs use it for Fluxta's words. Don't drift to synonyms the glossary explicitly avoids.
 
-Key terms from `CONTEXT.md`: **Account**, **Sign-in**, **Sign-in Expiry**, **Reauthorization Required**, **Realtime Connection**, **Catch-up**, **Donation**, **Test Donation**, **Goal**, **Recent Events**.
+Key terms from `CONTEXT.md`: **Account**, **Sign-in**, **Sign-in Expiry**, **Reauthorization Required**, **Realtime Connection**, **Catch-up**, **Repeat**, **Donation**, **Test Donation**, **Goal**, **Recent Events**.
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 

@@ -61,12 +61,21 @@ _Avoid_: socket, connection (Fluxta's word for a transport link), stream.
 **Catch-up**:
 After the Realtime Connection comes back within one run of the sidecar,
 fetching the first page of the donation list and firing Donation Received for
-every Donation newer than the last one seen, oldest first. Centrifugo's own
-history often redelivers the same Donations, so every Donation is fired once
-per id. There is no Catch-up after the sidecar starts — Donations made while
-Fluxta was closed are not fired — and none for Goals, which DonationAlerts
-does not list.
+every Donation newer than the last one seen and not fired yet, oldest first.
+There is no Catch-up after the sidecar starts — Donations made while Fluxta
+was closed are not fired — and none for Goals, which DonationAlerts does not
+list.
 _Avoid_: replay, sync, recovery (Centrifugo's word for its own history).
+
+**Repeat**:
+DonationAlerts' "repeat alert" on a Donation: a new publication of the same
+Donation — same id, same `reason` — at a new position in the channel. It fires
+Donation Received again, like a new Donation. What fires once is a
+publication: Centrifugo's history replays one at the position it had, and
+Catch-up fires only Donations not fired at all in the run, so neither a
+replay nor Catch-up ever fires one twice.
+_Avoid_: duplicate (a duplicate is what deduplication drops; a Repeat is
+wanted), replay.
 
 ### Donations and goals
 

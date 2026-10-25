@@ -40,6 +40,18 @@ const SubscribeResponseSchema = z.object({
   channels: z.array(z.object({ channel: z.string(), token: z.string() })),
 });
 
+/**
+ * Only the list's shape and each entry's id are checked here; an entry is
+ * read as a Donation by the same mapping as a publication, which has the
+ * same fields.
+ */
+const DonationListSchema = z.object({
+  data: z.array(z.looseObject({ id: z.number() })),
+});
+
+/** One entry of the donation list, as DonationAlerts sent it. */
+export type ListedDonation = { id: number; data: unknown };
+
 export type DonationAlertsApi = {
   getUser(accessToken: string): Promise<DonationAlertsUser>;
   /**
@@ -50,6 +62,8 @@ export type DonationAlertsApi = {
     accessToken: string,
     request: { client: string; channels: string[] },
   ): Promise<ChannelToken[]>;
+  /** The first page of the Account's donations, newest first (30 of them). */
+  listDonations(accessToken: string): Promise<ListedDonation[]>;
 };
 
 /**
@@ -127,6 +141,20 @@ export function createApi(fetchImpl: typeof fetch = fetch): DonationAlertsApi {
       }
 
       return parsed.data.channels;
+    },
+
+    async listDonations(accessToken) {
+      const parsed = DonationListSchema.safeParse(
+        await call("/alerts/donations", accessToken),
+      );
+
+      if (!parsed.success) {
+        throw new Error(
+          "DonationAlerts returned a donation list the plugin does not understand",
+        );
+      }
+
+      return parsed.data.data.map((entry) => ({ id: entry.id, data: entry }));
     },
   };
 }

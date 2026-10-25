@@ -99,6 +99,7 @@ function setup() {
   };
   const onDonation = vi.fn();
   const onGoal = vi.fn();
+  const onDonationsSubscribed = vi.fn();
   const connection = new RealtimeConnection({
     api,
     createClient: (authorize) => {
@@ -110,9 +111,18 @@ function setup() {
     random: () => 0,
     onDonation,
     onGoal,
+    onDonationsSubscribed,
     onChange: () => {},
   });
-  return { connection, clients, timers, api, onDonation, onGoal };
+  return {
+    connection,
+    clients,
+    timers,
+    api,
+    onDonation,
+    onGoal,
+    onDonationsSubscribed,
+  };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -165,8 +175,11 @@ describe("RealtimeConnection", () => {
     channel.subscribe({ isResubscribe: false, recovered: false });
     expect(connection.state()).toEqual({ status: "connected" });
 
-    channel.publish({ data: { id: 1 } });
-    expect(onDonation).toHaveBeenCalledWith({ id: 1 });
+    channel.publish({ data: { id: 1 }, seq: 9 });
+    expect(onDonation).toHaveBeenCalledWith(
+      { id: 1 },
+      { seq: 9, gen: undefined, offset: undefined },
+    );
   });
 
   it("reports a drop and comes back when centrifuge-js resubscribes", async () => {
@@ -243,6 +256,21 @@ describe("RealtimeConnection", () => {
 
     timers.runNext();
     expect(client.resubscribes.get(CHANNEL)).toBe(1);
+  });
+
+  it("says so every time the donation channel is subscribed", async () => {
+    const { connection, clients, onDonationsSubscribed } = setup();
+    connection.follow(ACCOUNT);
+    await settle();
+    const client = clients[0]!;
+
+    client.channel().subscribe({ isResubscribe: false, recovered: false });
+    client.drop("insufficient state", true);
+    client.channel().subscribe({ isResubscribe: true, recovered: true });
+    client.channel(GOALS).subscribe({ isResubscribe: true, recovered: true });
+
+    expect(onDonationsSubscribed).toHaveBeenCalledTimes(2);
+    expect(onDonationsSubscribed).toHaveBeenLastCalledWith(ACCOUNT);
   });
 
   it("hands on goal publications", async () => {
