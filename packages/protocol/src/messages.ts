@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AccountStateSchema } from "./account";
 import { RealtimeStateSchema } from "./realtime";
+import { TestDonationDraftSchema } from "./test-donation";
 
 /**
  * The message protocol between the Plugin sidecar and the Plugin Editor.
@@ -26,6 +27,10 @@ const EditorMessageSchema = z.discriminatedUnion("event", [
   z.object({ event: z.literal("sign-in") }),
   z.object({ event: z.literal("cancel-sign-in") }),
   z.object({ event: z.literal("sign-out") }),
+  z.object({
+    event: z.literal("send-test-donation"),
+    donation: TestDonationDraftSchema,
+  }),
 ]);
 
 /** A message the Plugin Editor sends to the sidecar. */
@@ -33,6 +38,8 @@ export type EditorMessage = z.infer<typeof EditorMessageSchema>;
 
 const PluginMessageSchema = z.discriminatedUnion("event", [
   z.object({ event: z.literal("status"), status: PluginStatusSchema }),
+  /** The Test Donation went out as Donation Received. */
+  z.object({ event: z.literal("test-donation-sent") }),
 ]);
 
 /** A message the sidecar sends to the Plugin Editor. */

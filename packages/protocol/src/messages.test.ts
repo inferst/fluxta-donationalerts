@@ -8,12 +8,34 @@ describe("isEditorMessage", () => {
     expect(isEditorMessage({ event: "sign-in" })).toBe(true);
     expect(isEditorMessage({ event: "cancel-sign-in" })).toBe(true);
     expect(isEditorMessage({ event: "sign-out" })).toBe(true);
+    expect(
+      isEditorMessage({
+        event: "send-test-donation",
+        donation: {
+          username: "Mike",
+          amount: 100,
+          currency: "RUB",
+          message: "",
+        },
+      }),
+    ).toBe(true);
   });
 
   it("refuses a malformed or unknown message", () => {
     expect(isEditorMessage(null)).toBe(false);
     expect(isEditorMessage("sign-in")).toBe(false);
     expect(isEditorMessage({ event: "launch" })).toBe(false);
+    expect(
+      isEditorMessage({
+        event: "send-test-donation",
+        donation: {
+          username: "Mike",
+          amount: "100",
+          currency: "RUB",
+          message: "",
+        },
+      }),
+    ).toBe(false);
   });
 });
 

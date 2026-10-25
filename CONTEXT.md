@@ -92,7 +92,9 @@ _Avoid_: alert (what DonationAlerts' widget shows), tip, payment.
 A Donation the streamer makes up in the Plugin Editor — name, amount,
 currency, message — and the plugin fires as Donation Received with `isTest`
 set, so a scenario can be tried end to end without money. It never reaches
-DonationAlerts. DonationAlerts' own test alert never reaches the plugin.
+DonationAlerts. Its `donationId` is 0, and it goes past Catch-up and
+deduplication: it moves no boundary and is fired every time it is sent.
+DonationAlerts' own test alert never reaches the plugin.
 _Avoid_: fake donation, simulation.
 
 **Goal**:
