@@ -1,23 +1,35 @@
-import { Button, ListRow, Section, StatusBadge } from "@fluxta/sdk/ui";
-import type { AccountState, EditorMessage } from "donationalerts-protocol";
+import {
+  Button,
+  ListRow,
+  Section,
+  StatusBadge,
+  type StatusTone,
+} from "@fluxta/sdk/ui";
+import type {
+  AccountState,
+  EditorMessage,
+  RealtimeState,
+} from "donationalerts-protocol";
 
 type Props = {
   account: AccountState;
+  /** Only while the Account is signed in. */
+  realtime?: RealtimeState;
   send: (message: EditorMessage) => void;
 };
 
-export function AccountCard({ account, send }: Props) {
+export function AccountCard({ account, realtime, send }: Props) {
   return (
     <Section
       title="DonationAlerts account"
       description="The account whose donations and goals reach Fluxta. Signing in opens DonationAlerts in your browser; nothing else is needed."
     >
-      <AccountRow account={account} send={send} />
+      <AccountRow account={account} realtime={realtime} send={send} />
     </Section>
   );
 }
 
-function AccountRow({ account, send }: Props) {
+function AccountRow({ account, realtime, send }: Props) {
   switch (account.status) {
     case "signed-out":
       return (
@@ -80,7 +92,8 @@ function AccountRow({ account, send }: Props) {
           leading={<Avatar src={account.avatar} />}
           title={account.name}
           description={`Signed in until ${formatDate(account.expiresAt)}`}
-          badges={<StatusBadge tone="ok">Signed in</StatusBadge>}
+          badges={<RealtimeBadge realtime={realtime} />}
+          detail={<RealtimeDetail realtime={realtime} />}
           actions={
             <Button
               variant="outline"
@@ -91,6 +104,52 @@ function AccountRow({ account, send }: Props) {
           }
         />
       );
+  }
+}
+
+const TONE: Record<RealtimeState["status"], StatusTone> = {
+  connecting: "pending",
+  connected: "ok",
+  reconnecting: "pending",
+  stopped: "error",
+};
+
+const LABEL: Record<RealtimeState["status"], string> = {
+  connecting: "Connecting",
+  connected: "Connected",
+  reconnecting: "Reconnecting",
+  stopped: "Stopped",
+};
+
+function RealtimeBadge({ realtime }: { realtime?: RealtimeState }) {
+  if (!realtime) {
+    return null;
+  }
+
+  return (
+    <StatusBadge tone={TONE[realtime.status]}>
+      {LABEL[realtime.status]}
+    </StatusBadge>
+  );
+}
+
+function RealtimeDetail({ realtime }: { realtime?: RealtimeState }) {
+  switch (realtime?.status) {
+    case "reconnecting":
+      return (
+        <p className="text-muted-foreground text-xs/relaxed">
+          Lost DonationAlerts ({realtime.reason}). Trying again on its own —
+          nothing to do.
+        </p>
+      );
+    case "stopped":
+      return (
+        <p role="alert" className="text-destructive text-xs/relaxed">
+          {realtime.reason}. Sign out and sign in again.
+        </p>
+      );
+    default:
+      return null;
   }
 }
 

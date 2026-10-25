@@ -26,7 +26,13 @@ export function PluginEditorApp() {
         {
           id: "account",
           label: "Account",
-          content: <AccountCard account={status.account} send={send} />,
+          content: (
+            <AccountCard
+              account={status.account}
+              realtime={status.realtime}
+              send={send}
+            />
+          ),
         },
       ]}
     />

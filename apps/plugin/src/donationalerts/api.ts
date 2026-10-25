@@ -17,18 +17,39 @@ export type DonationAlertsUser = {
   id: number;
   name: string;
   avatar: string;
+  /**
+   * What the Realtime Connection authenticates with. A secret like the access
+   * token, and fetched afresh for every connection rather than persisted.
+   */
+  socketConnectionToken: string;
 };
+
+/** A private channel and the token that admits one Centrifugo client to it. */
+export type ChannelToken = { channel: string; token: string };
 
 const UserResponseSchema = z.object({
   data: z.object({
     id: z.number(),
     name: z.string(),
     avatar: z.string().nullish(),
+    socket_connection_token: z.string(),
   }),
+});
+
+const SubscribeResponseSchema = z.object({
+  channels: z.array(z.object({ channel: z.string(), token: z.string() })),
 });
 
 export type DonationAlertsApi = {
   getUser(accessToken: string): Promise<DonationAlertsUser>;
+  /**
+   * Tokens for the Account's private channels, valid only for the Centrifugo
+   * client `client` — every reconnect has a new one, so a new call.
+   */
+  subscribeChannels(
+    accessToken: string,
+    request: { client: string; channels: string[] },
+  ): Promise<ChannelToken[]>;
 };
 
 /**
@@ -38,12 +59,21 @@ export type DonationAlertsApi = {
  * error message built from the URL or the status cannot leak it.
  */
 export function createApi(fetchImpl: typeof fetch = fetch): DonationAlertsApi {
-  async function get(path: string, accessToken: string): Promise<unknown> {
+  async function call(
+    path: string,
+    accessToken: string,
+    body?: unknown,
+  ): Promise<unknown> {
     let response: Response;
 
     try {
       response = await fetchImpl(`${API_BASE_URL}${path}`, {
-        headers: { authorization: `Bearer ${accessToken}` },
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
       throw new Error("DonationAlerts could not be reached");
@@ -67,7 +97,7 @@ export function createApi(fetchImpl: typeof fetch = fetch): DonationAlertsApi {
   return {
     async getUser(accessToken) {
       const parsed = UserResponseSchema.safeParse(
-        await get("/user/oauth", accessToken),
+        await call("/user/oauth", accessToken),
       );
 
       if (!parsed.success) {
@@ -76,8 +106,27 @@ export function createApi(fetchImpl: typeof fetch = fetch): DonationAlertsApi {
         );
       }
 
-      const { id, name, avatar } = parsed.data.data;
-      return { id, name, avatar: avatar ?? "" };
+      const { id, name, avatar, socket_connection_token } = parsed.data.data;
+      return {
+        id,
+        name,
+        avatar: avatar ?? "",
+        socketConnectionToken: socket_connection_token,
+      };
+    },
+
+    async subscribeChannels(accessToken, request) {
+      const parsed = SubscribeResponseSchema.safeParse(
+        await call("/centrifuge/subscribe", accessToken, request),
+      );
+
+      if (!parsed.success) {
+        throw new Error(
+          "DonationAlerts returned channel tokens the plugin does not understand",
+        );
+      }
+
+      return parsed.data.channels;
     },
   };
 }

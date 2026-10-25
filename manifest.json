@@ -16,5 +16,48 @@
   "icon": "icons/hand-coins.svg",
   "editor": "editor/plugin.html",
   "editorPlacement": "settings",
-  "actions": []
+  "actions": [],
+  "events": [
+    {
+      "type": "donation-received",
+      "name": "Donation Received",
+      "fields": [
+        {
+          "key": "donationId",
+          "name": "Donation ID",
+          "type": "number"
+        },
+        {
+          "key": "username",
+          "name": "Username",
+          "type": "string"
+        },
+        {
+          "key": "message",
+          "name": "Message",
+          "type": "string"
+        },
+        {
+          "key": "messageType",
+          "name": "Message Type",
+          "type": "string"
+        },
+        {
+          "key": "amount",
+          "name": "Amount",
+          "type": "number"
+        },
+        {
+          "key": "currency",
+          "name": "Currency",
+          "type": "string"
+        },
+        {
+          "key": "isTest",
+          "name": "Is Test",
+          "type": "boolean"
+        }
+      ]
+    }
+  ]
 }

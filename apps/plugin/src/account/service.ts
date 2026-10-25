@@ -13,10 +13,8 @@ import {
   type Loopback,
   type SignInAnswer,
 } from "../donationalerts/loopback";
+import type { Schedule } from "../schedule";
 import type { AccountStore } from "./store";
-
-/** Schedules `run` after `ms` milliseconds; the returned function cancels it. */
-export type Schedule = (ms: number, run: () => void) => () => void;
 
 export type AccountServiceDeps = {
   store: AccountStore;
@@ -137,8 +135,12 @@ export class AccountService {
       case "token": {
         try {
           const user = await this.deps.api.getUser(outcome.accessToken);
+          // Listed field by field: the user also carries the socket token,
+          // which is fetched afresh for every connection and never persisted.
           await this.deps.store.save({
-            ...user,
+            id: user.id,
+            name: user.name,
+            avatar: user.avatar,
             accessToken: outcome.accessToken,
             expiresAt: signedInAt + outcome.expiresIn * 1000,
           });

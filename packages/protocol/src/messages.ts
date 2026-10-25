@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { AccountStateSchema } from "./account";
+import { RealtimeStateSchema } from "./realtime";
 
 /**
  * The message protocol between the Plugin sidecar and the Plugin Editor.
@@ -14,6 +15,8 @@ import { AccountStateSchema } from "./account";
 /** Everything the Plugin Editor renders. */
 export const PluginStatusSchema = z.object({
   account: AccountStateSchema,
+  /** Only while the Account is signed in. */
+  realtime: RealtimeStateSchema.optional(),
 });
 
 export type PluginStatus = z.infer<typeof PluginStatusSchema>;

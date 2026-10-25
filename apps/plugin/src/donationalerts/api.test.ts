@@ -27,6 +27,46 @@ const USER = {
   },
 };
 
+describe("subscribeChannels", () => {
+  it("asks for this client's channel tokens", async () => {
+    const fetch = fakeFetch(() =>
+      Response.json({
+        channels: [{ channel: "$alerts:donation_1", token: "channel-token" }],
+      }),
+    );
+    const channels = await createApi(fetch).subscribeChannels("secret-token", {
+      client: "client-uuid",
+      channels: ["$alerts:donation_1"],
+    });
+
+    expect(channels).toEqual([
+      { channel: "$alerts:donation_1", token: "channel-token" },
+    ]);
+    expect(fetch.calls[0]?.url).toBe(
+      "https://www.donationalerts.com/api/v1/centrifuge/subscribe",
+    );
+    expect(fetch.calls[0]?.init).toMatchObject({
+      method: "POST",
+      headers: {
+        authorization: "Bearer secret-token",
+        "content-type": "application/json",
+      },
+    });
+    expect(JSON.parse(String(fetch.calls[0]?.init?.body))).toEqual({
+      client: "client-uuid",
+      channels: ["$alerts:donation_1"],
+    });
+  });
+
+  it("turns a 401 into Unauthorized", async () => {
+    const fetch = fakeFetch(() => new Response(null, { status: 401 }));
+
+    await expect(
+      createApi(fetch).subscribeChannels("t", { client: "c", channels: [] }),
+    ).rejects.toBeInstanceOf(Unauthorized);
+  });
+});
+
 describe("getUser", () => {
   it("reads the Account's identity with the token in the header", async () => {
     const fetch = fakeFetch(() => Response.json(USER));
@@ -36,6 +76,7 @@ describe("getUser", () => {
       id: 10111687,
       name: "MikeRime",
       avatar: "https://example.com/avatar.png",
+      socketConnectionToken: "socket-token",
     });
     expect(fetch.calls[0]?.url).toBe(
       "https://www.donationalerts.com/api/v1/user/oauth",

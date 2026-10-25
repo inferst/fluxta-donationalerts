@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@fluxta/sdk": "catalog:",
+    "centrifuge": "catalog:",
     "donationalerts-protocol": "workspace:*",
     "zod": "catalog:"
   },
