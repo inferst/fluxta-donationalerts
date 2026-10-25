@@ -36,12 +36,43 @@ describe("isPluginMessage", () => {
     }
   });
 
+  it("accepts every Realtime Connection state", () => {
+    const account = {
+      status: "signed-in",
+      name: "MikeRime",
+      avatar: "",
+      expiresAt: 1_800_000_000_000,
+    };
+    for (const realtime of [
+      { status: "connecting" },
+      { status: "connected" },
+      { status: "reconnecting", reason: "connection closed" },
+      {
+        status: "stopped",
+        reason: "DonationAlerts no longer accepts this sign-in",
+      },
+    ]) {
+      expect(
+        isPluginMessage({ event: "status", status: { account, realtime } }),
+      ).toBe(true);
+    }
+  });
+
   it("refuses anything else", () => {
     expect(isPluginMessage({ event: "status", status: {} })).toBe(false);
     expect(
       isPluginMessage({
         event: "status",
         status: { account: { status: "signed-in", name: "MikeRime" } },
+      }),
+    ).toBe(false);
+    expect(
+      isPluginMessage({
+        event: "status",
+        status: {
+          account: { status: "signed-out" },
+          realtime: { status: "reconnecting" },
+        },
       }),
     ).toBe(false);
     expect(isPluginMessage({ event: "chats" })).toBe(false);

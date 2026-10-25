@@ -4,6 +4,9 @@ packages:
 
 allowBuilds:
   esbuild: true
+  # A dependency of centrifuge 2.x for its protobuf build, which the plugin
+  # does not use; its install script is not needed.
+  protobufjs: false
 
 catalog:
   "@eslint/js": "^10.0.1"
@@ -14,6 +17,8 @@ catalog:
   "@types/react": "^19.2.8"
   "@types/react-dom": "^19.2.3"
   "@vitejs/plugin-react": "^5.1.2"
+  # DonationAlerts runs Centrifugo v2, which only centrifuge-js 2.x speaks.
+  centrifuge: "2.8.5"
   eslint: "^10.0.2"
   eslint-config-prettier: "^10.1.8"
   eslint-plugin-react-hooks: "^7.0.1"

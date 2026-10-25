@@ -17,7 +17,9 @@ const USER: DonationAlertsUser = {
   id: 10111687,
   name: "MikeRime",
   avatar: "https://example.com/avatar.png",
+  socketConnectionToken: "socket-token",
 };
+const IDENTITY = { id: USER.id, name: USER.name, avatar: USER.avatar };
 const NOW = 1_760_000_000_000;
 
 /** A loopback whose browser answer the test hands in. */
@@ -58,7 +60,10 @@ function setup(options: { openLoopback?: () => Promise<Loopback> } = {}) {
   const fake = fakeLoopback();
   const timers = manualTimers();
   const store = new AccountStore({ setPluginSettings: async () => {} });
-  const api: DonationAlertsApi = { getUser: vi.fn(async () => USER) };
+  const api: DonationAlertsApi = {
+    getUser: vi.fn(async () => USER),
+    subscribeChannels: vi.fn(async () => []),
+  };
   const openLoopback = vi.fn<
     (options: { port: number; state: string }) => Promise<Loopback>
   >(options.openLoopback ?? (async () => fake.loopback));
@@ -111,7 +116,7 @@ describe("AccountService", () => {
 
     expect(fake.loopback.closed).toBe(true);
     expect(store.get()).toEqual({
-      ...USER,
+      ...IDENTITY,
       accessToken: "tok",
       expiresAt: NOW + 31536000 * 1000,
     });
@@ -215,7 +220,7 @@ describe("AccountService", () => {
 
   it("replaces the Account on a new Sign-in", async () => {
     const { service, store, fake } = setup();
-    await store.save({ ...USER, accessToken: "old", expiresAt: 1 });
+    await store.save({ ...IDENTITY, accessToken: "old", expiresAt: 1 });
     const done = service.startSignIn();
     await settle();
 
@@ -227,7 +232,7 @@ describe("AccountService", () => {
 
   it("forgets the Account on Sign out", async () => {
     const { service, store } = setup();
-    await store.save({ ...USER, accessToken: "tok", expiresAt: 1 });
+    await store.save({ ...IDENTITY, accessToken: "tok", expiresAt: 1 });
 
     await service.signOut();
 

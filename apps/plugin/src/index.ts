@@ -4,29 +4,84 @@ import { AccountService } from "./account/service";
 import { AccountStore } from "./account/store";
 import { createApi } from "./donationalerts/api";
 import { openLoopback } from "./donationalerts/loopback";
+import {
+  DONATION_RECEIVED,
+  toDonationReceived,
+} from "./events/donation-received";
 import { openInBrowser } from "./open-browser";
 import { plugin } from "./plugin";
+import { createCentrifugeClient } from "./realtime/client";
+import { RealtimeConnection } from "./realtime/connection";
+import { schedule } from "./schedule";
 
+const api = createApi();
 const store = new AccountStore(plugin);
 const account = new AccountService({
   store,
-  api: createApi(),
+  api,
   openLoopback,
   openBrowser: openInBrowser,
   now: () => Date.now(),
-  schedule: (ms, run) => {
-    const timer = setTimeout(run, ms);
-    return () => clearTimeout(timer);
+  schedule,
+  onChange: () => {
+    follow();
+    publish();
+  },
+});
+const realtime = new RealtimeConnection({
+  api,
+  createClient: createCentrifugeClient,
+  schedule,
+  onDonation: (data) => {
+    const payload = toDonationReceived(data);
+
+    if (!payload) {
+      console.warn("A donation the plugin could not read was skipped");
+      return;
+    }
+
+    // The id only: donor names and messages stay out of the log.
+    console.log(`Donation ${payload.donationId} received`);
+    plugin.emitEvent(DONATION_RECEIVED, payload);
   },
   onChange: () => publish(),
 });
 
-/** Tells every open editor how the Account stands. */
+/** Keeps the Realtime Connection on the signed-in Account, or stops it. */
+function follow(): void {
+  const stored = store.get();
+  realtime.follow(stored && { id: stored.id, accessToken: stored.accessToken });
+}
+
+/**
+ * Tells every open editor how the Account stands, and Fluxta whether it is
+ * connected — one External Connection, connected while the donation channel
+ * is subscribed, none when signed out.
+ */
 function publish(): void {
+  const stored = store.get();
+  const state = account.state();
+  const live = realtime.state();
+
   plugin.sendToEditor({
     event: "status",
-    status: { account: account.state() },
+    status:
+      state.status === "signed-in" && live
+        ? { account: state, realtime: live }
+        : { account: state },
   } satisfies PluginMessage);
+
+  plugin.setConnections(
+    stored
+      ? [
+          {
+            id: String(stored.id),
+            title: stored.name,
+            connected: live?.status === "connected",
+          },
+        ]
+      : [],
+  );
 }
 
 // Attached before connecting, so nothing sent while the editor was already
@@ -60,5 +115,6 @@ await plugin.connect();
 // echo the store's own writes, the only writer there is.
 await plugin.onPluginSettings<unknown>((settings) => {
   store.hydrate(settings);
+  follow();
   publish();
 });
