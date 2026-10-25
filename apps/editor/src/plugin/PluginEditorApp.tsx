@@ -1,6 +1,7 @@
 import { EditorPage, PluginEditorLayout } from "@fluxta/sdk/ui";
 
 import { AccountCard } from "./AccountCard";
+import { RecentEventsCard } from "./RecentEventsCard";
 import { TestDonationCard } from "./TestDonationCard";
 import { usePluginStatus } from "./usePluginStatus";
 
@@ -39,6 +40,11 @@ export function PluginEditorApp() {
           id: "test-donation",
           label: "Test donation",
           content: <TestDonationCard testSent={testSent} send={send} />,
+        },
+        {
+          id: "recent-events",
+          label: "Recent events",
+          content: <RecentEventsCard recent={status.recent} />,
         },
       ]}
     />

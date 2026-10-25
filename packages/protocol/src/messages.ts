@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { AccountStateSchema } from "./account";
+import { RecentEventSchema } from "./events";
 import { RealtimeStateSchema } from "./realtime";
 import { TestDonationDraftSchema } from "./test-donation";
 
@@ -18,6 +19,8 @@ export const PluginStatusSchema = z.object({
   account: AccountStateSchema,
   /** Only while the Account is signed in. */
   realtime: RealtimeStateSchema.optional(),
+  /** The Events fired in this run, newest first. */
+  recent: z.array(RecentEventSchema),
 });
 
 export type PluginStatus = z.infer<typeof PluginStatusSchema>;

@@ -19,10 +19,12 @@ import { toTestDonation } from "./events/test-donation";
 import { openInBrowser } from "./open-browser";
 import { plugin } from "./plugin";
 import { createCentrifugeClient } from "./realtime/client";
+import { RecentEvents } from "./recent/recent-events";
 import { RealtimeConnection } from "./realtime/connection";
 import { schedule } from "./schedule";
 
 const api = createApi();
+const recent = new RecentEvents();
 const store = new AccountStore(plugin);
 const account = new AccountService({
   store,
@@ -53,6 +55,8 @@ const donations = new DonationFeed({
         : `Donation ${payload.donationId} received`,
     );
     plugin.emitEvent(DONATION_RECEIVED, payload);
+    recent.donation(payload, delivery);
+    publish();
   },
 });
 const realtime = new RealtimeConnection({
@@ -71,6 +75,8 @@ const realtime = new RealtimeConnection({
 
     console.log(`Goal ${payload.goalId} updated`);
     plugin.emitEvent(GOAL_UPDATED, payload);
+    recent.goal(payload);
+    publish();
   },
   onUnauthorized: () => void account.refused(),
   onChange: () => publish(),
@@ -101,10 +107,11 @@ function publish(): void {
 
   plugin.sendToEditor({
     event: "status",
-    status:
-      state.status === "signed-in" && live
-        ? { account: state, realtime: live }
-        : { account: state },
+    status: {
+      account: state,
+      ...(state.status === "signed-in" && live ? { realtime: live } : {}),
+      recent: recent.list(),
+    },
   } satisfies PluginMessage);
 
   plugin.setConnections(
@@ -131,7 +138,10 @@ function sendTestDonation(draft: TestDonationDraft): void {
   }
 
   console.log("Test donation sent");
-  plugin.emitEvent(DONATION_RECEIVED, toTestDonation(draft));
+  const payload = toTestDonation(draft);
+  plugin.emitEvent(DONATION_RECEIVED, payload);
+  recent.donation(payload, "test");
+  publish();
   plugin.sendToEditor({ event: "test-donation-sent" } satisfies PluginMessage);
 }
 

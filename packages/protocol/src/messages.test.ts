@@ -66,9 +66,9 @@ describe("isPluginMessage", () => {
         expiresAt: 1_800_000_000_000,
       },
     ]) {
-      expect(isPluginMessage({ event: "status", status: { account } })).toBe(
-        true,
-      );
+      expect(
+        isPluginMessage({ event: "status", status: { account, recent: [] } }),
+      ).toBe(true);
     }
   });
 
@@ -85,9 +85,58 @@ describe("isPluginMessage", () => {
       { status: "reconnecting", reason: "connection closed" },
     ]) {
       expect(
-        isPluginMessage({ event: "status", status: { account, realtime } }),
+        isPluginMessage({
+          event: "status",
+          status: { account, realtime, recent: [] },
+        }),
       ).toBe(true);
     }
+  });
+
+  it("accepts Recent Events of every kind", () => {
+    const fields = {
+      donationId: 1,
+      username: "Mike",
+      message: "Hi",
+      messageType: "text",
+      amount: 100,
+      currency: "RUB",
+      isTest: false,
+    };
+    const recent = [
+      { kind: "donation", at: 1, delivery: "live", fields },
+      { kind: "donation", at: 2, delivery: "catch-up", fields },
+      { kind: "donation", at: 3, delivery: "test", fields },
+      {
+        kind: "goal",
+        at: 4,
+        fields: {
+          goalId: 7,
+          title: "Mic",
+          isActive: true,
+          currency: "RUB",
+          startAmount: 0,
+          raisedAmount: 1,
+          goalAmount: 2,
+        },
+      },
+    ];
+
+    expect(
+      isPluginMessage({
+        event: "status",
+        status: { account: { status: "signed-out" }, recent },
+      }),
+    ).toBe(true);
+    expect(
+      isPluginMessage({
+        event: "status",
+        status: {
+          account: { status: "signed-out" },
+          recent: [{ kind: "donation", at: 1, delivery: "replayed", fields }],
+        },
+      }),
+    ).toBe(false);
   });
 
   it("refuses anything else", () => {

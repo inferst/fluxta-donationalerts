@@ -1,3 +1,4 @@
+import type { DonationReceivedFields } from "donationalerts-protocol";
 import { z } from "zod";
 
 import { Numeric } from "./numeric";
@@ -5,15 +6,7 @@ import { Numeric } from "./numeric";
 export const DONATION_RECEIVED = "donation-received";
 
 /** Every Event Field the manifest declares for Donation Received. */
-export type DonationReceivedPayload = {
-  donationId: number;
-  username: string;
-  message: string;
-  messageType: string;
-  amount: number;
-  currency: string;
-  isTest: boolean;
-};
+export type DonationReceivedPayload = DonationReceivedFields;
 
 /**
  * Only the fields DonationAlerts documents. Its publications carry more —
