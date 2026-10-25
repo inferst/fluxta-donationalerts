@@ -1,6 +1,7 @@
 import type { RealtimeState } from "donationalerts-protocol";
 
 import { Unauthorized, type DonationAlertsApi } from "../donationalerts/api";
+import type { ChannelPosition } from "../donations/feed";
 import type { Schedule } from "../schedule";
 import type { PrivateSubscribe, RealtimeClient } from "./client";
 import { retryDelay } from "./retry";
@@ -13,8 +14,16 @@ export type RealtimeConnectionDeps = {
   createClient(onPrivateSubscribe: PrivateSubscribe): RealtimeClient;
   schedule: Schedule;
   random?: () => number;
-  /** A publication on the Account's donation channel, as Centrifugo sent it. */
-  onDonation(data: unknown): void;
+  /**
+   * A publication on the Account's donation channel, as Centrifugo sent it —
+   * live, or replayed from its history on resubscribe.
+   */
+  onDonation(data: unknown, position: ChannelPosition): void;
+  /**
+   * The donation channel is subscribed: on start, and again after every
+   * drop — just before the history Centrifugo replays is handed on.
+   */
+  onDonationsSubscribed(account: RealtimeAccount): void;
   /** A publication on the Account's goal channel, as Centrifugo sent it. */
   onGoal(data: unknown): void;
   /** Called whenever what `state()` returns may have changed. */
@@ -141,9 +150,9 @@ export class RealtimeConnection {
     });
 
     const donations = client.subscribe(donationChannel(account.id), {
-      publish: ({ data }) => {
+      publish: ({ data, seq, gen, offset }) => {
         if (live()) {
-          this.deps.onDonation(data);
+          this.deps.onDonation(data, { seq, gen, offset });
         }
       },
       subscribe: () => {
@@ -153,6 +162,10 @@ export class RealtimeConnection {
           this.attempts.delete("start");
           this.attempts.delete("donations");
           this.set({ status: "connected" });
+          // centrifuge-js reports the subscription and then, in the same
+          // turn, hands on the history it replayed; Catch-up's list arrives
+          // only after that, so it finds those already fired.
+          this.deps.onDonationsSubscribed(account);
         }
       },
       error: ({ message }) => {

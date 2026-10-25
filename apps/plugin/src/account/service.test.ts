@@ -63,6 +63,7 @@ function setup(options: { openLoopback?: () => Promise<Loopback> } = {}) {
   const api: DonationAlertsApi = {
     getUser: vi.fn(async () => USER),
     subscribeChannels: vi.fn(async () => []),
+    listDonations: vi.fn(async () => []),
   };
   const openLoopback = vi.fn<
     (options: { port: number; state: string }) => Promise<Loopback>

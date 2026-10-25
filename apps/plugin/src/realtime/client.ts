@@ -19,7 +19,13 @@ export type PrivateSubscribe = (
 ) => void;
 
 export type SubscriptionHandlers = {
-  publish(ctx: { data: unknown }): void;
+  /** `seq`/`gen` or `offset`: where the publication sits in the channel. */
+  publish(ctx: {
+    data: unknown;
+    seq?: number;
+    gen?: number;
+    offset?: number;
+  }): void;
   subscribe(ctx: { isResubscribe: boolean; recovered: boolean }): void;
   error(ctx: { message: string }): void;
 };
