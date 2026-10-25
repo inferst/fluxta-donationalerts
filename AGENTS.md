@@ -8,7 +8,7 @@ Fluxta DonationAlerts is a [Fluxta](https://fluxta.app) plugin that connects a s
 
 It is a pnpm workspace (turbo) of TypeScript packages. The Plugin API it builds against — `@fluxta/sdk` and the `fluxta` CLI from `@fluxta/cli` — is owned by Fluxta, not by this repo (see [Working against Fluxta](#working-against-fluxta)).
 
-**State of the repo**: the scaffold from `fluxta create` and nothing else yet. The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
+**State of the repo**: Sign-in works (#2); no Events yet. The v1 spec is #1; the issues that carry code are sliced from it. Update this file's [Architecture](#architecture) as the code lands.
 
 ## Commands
 
@@ -24,11 +24,20 @@ pnpm install     # Node ≥ 22.18, the pnpm version pinned in package.json
 pnpm build          # wipe dist/ and build the editor and the sidecar into dist/donationalerts/
 pnpm dev            # build the editor once, then watch both apps
 pnpm typecheck      # tsc --noEmit in every package
+pnpm test           # vitest in apps/plugin and packages/protocol
 pnpm lint           # eslint over the whole workspace
 pnpm format         # prettier --write; `pnpm format:check` only checks
 ```
 
-`fluxta publish` runs `lint` and `format:check` itself and stops if either fails. Tests (vitest) arrive with the first code.
+`fluxta publish` runs `lint` and `format:check` itself and stops if either fails.
+
+### Target a specific package
+
+```bash
+pnpm --filter donationalerts-plugin test
+pnpm --filter donationalerts-protocol test
+pnpm --filter donationalerts-editor build
+```
 
 ### Run it in Fluxta
 
@@ -47,9 +56,32 @@ Editor-only rebuilds restart nothing — reopen the editor in Fluxta to see them
 
 ### Packages
 
-- `apps/plugin` — the Plugin sidecar: the Node.js process Fluxta starts. tsdown bundles it into `dist/donationalerts/index.mjs` and copies `manifest.json` beside it.
-- `apps/editor` — the Plugin Editor, React + Vite, built into `dist/donationalerts/editor/`.
-- `packages/protocol` (planned, as in `inferst/fluxta-telegram`) — the editor ↔ sidecar messages and the state the Plugin Editor renders, each message an object with an `event` discriminant, checked with zod. Consumed as TypeScript source; no build.
+- `apps/plugin` (`donationalerts-plugin`) — the Plugin sidecar: the Node.js process Fluxta starts. tsdown bundles it into `dist/donationalerts/index.mjs` and copies `manifest.json` and `icons/` beside it.
+- `apps/editor` (`donationalerts-editor`) — the Plugin Editor (`plugin.html`, in Fluxta's settings), React + Vite + Tailwind, built into `dist/donationalerts/editor/`. The plugin has no Action Editors.
+- `packages/protocol` (`donationalerts-protocol`) — what the sidecar and the editor share: the editor ↔ sidecar messages and the state the Plugin Editor renders (`messages.ts`, each message an object with an `event` discriminant, checked with zod) and the Account as the editor sees it (`account.ts`). Consumed as TypeScript source; it has no build.
+
+### Plugin sidecar (`apps/plugin/src`)
+
+```
+index.ts          composition root: store + service, editor messages, publish(), connect()
+plugin.ts         the single `Plugin` instance from @fluxta/sdk/api
+open-browser.ts   opens the consent screen from the sidecar — editor iframes are sandboxed
+account/
+  store.ts          the persisted Account — the only writer of Plugin Settings, the only holder of the token
+  service.ts        Sign-in (loopback, timeout, cancel), Sign out, and the AccountState the editor renders
+donationalerts/   DonationAlerts plumbing
+  config.ts         the public client id, the loopback redirect, every scope with the feature it serves
+  api.ts            the only code that calls fetch: `/user/oauth`; a 401 is `Unauthorized`
+  callback.ts       what the browser brought back: token, refusal, or a callback that is not this Sign-in's
+  loopback.ts       the redirect target on 127.0.0.1:29361, open only during a Sign-in
+```
+
+The Account's state travels `service.ts` (`onChange`) → `index.ts` `publish()`, which sends it to every open editor.
+
+### Editor (`apps/editor`)
+
+- `src/plugin/` is the Plugin Editor: `AccountCard.tsx` renders the Account and sends `sign-in`, `cancel-sign-in`, `sign-out`; `usePluginStatus.ts` holds the last status the sidecar sent.
+- Built from Fluxta's [UI Kit](https://fluxta.app/docs/plugins/reference/ui-kit) (`@fluxta/sdk/ui`).
 
 ## Key Conventions
 
@@ -63,7 +95,8 @@ Editor-only rebuilds restart nothing — reopen the editor in Fluxta to see them
 - **The plugin keeps no DonationAlerts state** beyond the Account and, in memory, what Catch-up and Recent Events need. Progress or flags a scenario wants to keep are the scenario's, in a Global Variable.
 - **The sidecar bundle is self-contained.** Fluxta runs it with a bundled Node and no `node_modules`, so tsdown inlines every non-builtin dependency (`noExternal`). Do not externalize one. `centrifuge` stays pinned to `2.8.5`: DonationAlerts runs Centrifugo v2.
 - **File naming**: the sidecar and the protocol package use kebab-case (`donation-received.ts`). In the editor, React components are PascalCase (`AccountCard.tsx`), hooks are `useThing.ts`.
-- **Tests**: vitest, colocated `*.test.ts`. No test reaches DonationAlerts: fake `fetch`, a fake Centrifugo client behind the narrow interface the sidecar depends on, hand-built payloads, a virtual clock.
+- **Tests**: vitest, colocated `*.test.ts`. No test reaches DonationAlerts: fake `fetch` (`api.test.ts`), a fake loopback and a manual clock for the Sign-in (`service.test.ts`), the real loopback server on a port the OS picks (`loopback.test.ts`), a fake Centrifugo client behind the narrow interface the sidecar depends on, hand-built payloads.
+- **The manifest declares `actions: []`.** The plugin has no Actions, but `fluxta validate` requires the field.
 - **Comments say why** — the DonationAlerts or Fluxta behaviour that forces the code — and use the capitalized terms of `CONTEXT.md` and Fluxta's [Terminology](https://fluxta.app/docs/plugins/getting-started/terminology).
 
 ## Working against Fluxta
