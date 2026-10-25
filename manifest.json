@@ -1,24 +1,20 @@
 {
   "name": "donationalerts",
-  "title": "Donationalerts",
+  "title": "DonationAlerts",
   "description": "Donations and goal updates from DonationAlerts as Events",
   "version": "0.1.0",
   "author": "Mikhail Morozov",
   "license": "MIT",
-  "homepage": "",
-  "repository": "",
-  "maintainers": [],
-  "minAppVersion": "0.1.0",
-  "platforms": ["windows","macos","linux"],
+  "homepage": "https://github.com/inferst/fluxta-donationalerts",
+  "repository": "https://github.com/inferst/fluxta-donationalerts",
+  "maintainers": ["inferst"],
+  "minAppVersion": "0.9.0",
+  "platforms": ["windows", "macos", "linux"],
   "categories": ["streaming"],
   "apiVersion": 1,
   "main": "index.mjs",
-  "actions": [
-    {
-      "context": "item",
-      "editor": "editor/index.html",
-      "name": "Hello",
-      "type": "hello"
-    }
-  ]
+  "icon": "icons/hand-coins.svg",
+  "editor": "editor/plugin.html",
+  "editorPlacement": "settings",
+  "actions": []
 }
