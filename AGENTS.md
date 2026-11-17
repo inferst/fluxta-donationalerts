@@ -76,7 +76,7 @@ donationalerts/   DonationAlerts plumbing
   callback.ts       what the browser brought back: token, refusal, or a callback that is not this Sign-in's
   loopback.ts       the redirect target on 127.0.0.1:29361, open only during a Sign-in
 realtime/         the Realtime Connection to DonationAlerts' Centrifugo
-  client.ts         the narrow slice of centrifuge-js it uses, and the real client on Node's own WebSocket
+  client.ts         the narrow slice of centrifuge-js it uses, and the real client on Node's own WebSocket; a transport wrapper closes and reconnects on JSON decoding errors
   connection.ts     follows the signed-in Account: socket token, private channel tokens, the donation and goal channels, retries, state
   retry.ts          the 1 s → 60 s backoff with jitter every retry shares
 donations/
@@ -105,7 +105,7 @@ The Account's state travels `service.ts` (`onChange`) → `index.ts`, which poin
 - **The plugin keeps no DonationAlerts state** beyond the Account and, in memory, what Catch-up and Recent Events need. Progress or flags a scenario wants to keep are the scenario's, in a Global Variable.
 - **The sidecar bundle is self-contained.** Fluxta runs it with a bundled Node and no `node_modules`, so tsdown inlines every non-builtin dependency (`noExternal`). Do not externalize one. `centrifuge` stays pinned to `2.8.5`: DonationAlerts runs Centrifugo v2. Its transport is Node's own `WebSocket` (Fluxta bundles Node 22.17), so there is no `ws`; `protobufjs`, which centrifuge 2.x pulls in for a build the plugin does not use, is denied its install script in `pnpm-workspace.yaml`.
 - **File naming**: the sidecar and the protocol package use kebab-case (`donation-received.ts`). In the editor, React components are PascalCase (`AccountCard.tsx`), hooks are `useThing.ts`.
-- **Tests**: vitest, colocated `*.test.ts`. No test reaches DonationAlerts: fake `fetch` (`api.test.ts`), a fake loopback and a manual clock for the Sign-in (`service.test.ts`), the real loopback server on a port the OS picks (`loopback.test.ts`), a fake centrifuge-js client behind `RealtimeClient` (`connection.test.ts`), a fake donation list and a manual clock for Catch-up (`feed.test.ts`), payloads as DonationAlerts sent them (`donation-received.test.ts`).
+- **Tests**: vitest, colocated `*.test.ts`. No test reaches DonationAlerts: fake `fetch` (`api.test.ts`), a fake loopback and a manual clock for the Sign-in (`service.test.ts`), the real loopback server on a port the OS picks (`loopback.test.ts`), the real centrifuge-js client on a fake WebSocket (`client.test.ts`), a fake centrifuge-js client behind `RealtimeClient` (`connection.test.ts`), a fake donation list and a manual clock for Catch-up (`feed.test.ts`), payloads as DonationAlerts sent them (`donation-received.test.ts`).
 - **The manifest declares `actions: []`.** The plugin has no Actions, but `fluxta validate` requires the field.
 - **Comments say why** — the DonationAlerts or Fluxta behaviour that forces the code — and use the capitalized terms of `CONTEXT.md` and Fluxta's [Terminology](https://fluxta.app/docs/plugins/getting-started/terminology).
 
